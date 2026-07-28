@@ -45,6 +45,7 @@ let snoozedUntil = null;
 let lastReminder = null;
 let pendingClose = false;
 let isQuitting = false;
+let trayHintShown = false;
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
@@ -328,9 +329,11 @@ function ensureTray() {
   if (tray && !tray.isDestroyed()) return true;
   try {
     tray = new Tray(createTrayImage());
+    if (tray.isDestroyed()) throw new Error("托盘图标已被系统销毁");
     tray.setTitle("");
     tray.on("click", showWindow);
     tray.on("double-click", showWindow);
+    tray.on("right-click", () => tray?.popUpContextMenu());
     updateTray();
     return true;
   } catch (error) {
@@ -377,6 +380,17 @@ function hideWindowToTray() {
     return false;
   }
   mainWindow.hide();
+  if (!trayHintShown) {
+    trayHintShown = true;
+    try {
+      tray.displayBalloon({
+        title: "个人工具箱仍在运行",
+        content: "窗口已最小化到系统托盘。右键托盘图标可退出，单击图标可恢复窗口。"
+      });
+    } catch (error) {
+      console.warn("显示托盘提示失败：", error);
+    }
+  }
   broadcastState();
   return true;
 }
