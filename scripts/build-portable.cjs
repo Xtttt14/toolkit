@@ -20,10 +20,15 @@ if (fs.existsSync(executable)) {
   }
 }
 
-const command = process.platform === "win32" ? "npx.cmd" : "npx";
-const result = spawnSync(command, ["electron-builder", "--win", "portable"], {
-  cwd: path.join(__dirname, ".."),
-  stdio: "inherit"
+const root = path.join(__dirname, "..");
+const command = process.platform === "win32"
+  ? path.join(root, "node_modules", ".bin", "electron-builder.cmd")
+  : path.join(root, "node_modules", ".bin", "electron-builder");
+const result = spawnSync(command, ["--win", "portable"], {
+  cwd: root,
+  stdio: "inherit",
+  shell: process.platform === "win32"
 });
 
+if (result.error) console.error(`无法启动打包器：${result.error.message}`);
 process.exit(result.status ?? 1);
