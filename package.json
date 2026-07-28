@@ -1,0 +1,61 @@
+{
+  "name": "personal-toolbox",
+  "version": "1.1.0",
+  "private": true,
+  "description": "个人本地工具箱 - 饮水提醒 · 待办清单 · 番茄钟 · 记账助手",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --configLoader runner",
+    "electron": "electron .",
+    "start": "concurrently -k \"npm run dev\" \"wait-on http://127.0.0.1:5173 && electron .\"",
+    "build": "vite build --configLoader runner",
+    "dist": "npm run build && electron-builder --win portable dir",
+    "dist:portable": "npm run build && electron-builder --win portable"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron-store": "^8.2.0",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "vite": "^6.0.3",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "local.personal.toolbox",
+    "productName": "个人工具箱",
+    "executableName": "个人工具箱",
+    "asar": true,
+    "directories": {
+      "output": "release-1.1.0"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "electron/assets",
+        "to": "assets",
+        "filter": ["app.ico", "app.png"]
+      }
+    ],
+    "win": {
+      "icon": "electron/assets/app.ico",
+      "target": [
+        "portable",
+        "dir"
+      ]
+    },
+    "portable": {
+      "artifactName": "个人工具箱-${version}-${arch}.${ext}"
+    }
+  }
+}
