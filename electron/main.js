@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, Menu, Notification, Tray, nativeImage } = require("electron");
+const { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, Notification, Tray, nativeImage } = require("electron");
 const path = require("path");
 const Store = require("electron-store");
 
@@ -310,11 +310,12 @@ function getAssetPath(name) {
   return isDev ? path.join(__dirname, "assets", name) : path.join(process.resourcesPath, "assets", name);
 }
 function createTrayImage() {
-  for (const name of ["app.png", "app.ico"]) {
+  // Windows notification areas render multi-resolution ICO files most reliably.
+  for (const name of ["app.ico", "app.png"]) {
     try {
       const assetPath = getAssetPath(name);
       const image = nativeImage.createFromPath(assetPath);
-      if (!image.isEmpty()) return image.resize({ width: 16, height: 16 });
+      if (!image.isEmpty()) return image;
     } catch (error) {
       console.warn(`加载托盘图标失败：${name}`, error);
     }
@@ -385,7 +386,7 @@ function hideWindowToTray() {
     try {
       tray.displayBalloon({
         title: "个人工具箱仍在运行",
-        content: "窗口已最小化到系统托盘。右键托盘图标可退出，单击图标可恢复窗口。"
+        content: "窗口已最小化到系统托盘。右键托盘图标可退出，单击图标可恢复窗口；若图标被系统收起，可按Ctrl+Shift+T恢复窗口。"
       });
     } catch (error) {
       console.warn("显示托盘提示失败：", error);
@@ -618,6 +619,7 @@ app.whenReady().then(() => {
   app.setAppUserModelId("local.personal.toolbox");
   createAppMenu();
   ensureTray();
+  globalShortcut.register("CommandOrControl+Shift+T", showWindow);
   createWindow();
   updateTray();
   startReminderLoop();
@@ -628,5 +630,6 @@ app.on("activate", () => showWindow());
 app.on("before-quit", () => {
   isQuitting = true;
   pendingClose = true;
+  globalShortcut.unregister("CommandOrControl+Shift+T");
   if (tray) { tray.destroy(); tray = null; }
 });
