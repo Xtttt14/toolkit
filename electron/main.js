@@ -395,8 +395,8 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 820,
-    minWidth: 640,
-    minHeight: 460,
+    minWidth: 960,
+    minHeight: 640,
     backgroundColor: "#f4f6f8",
     show: false,
     title: "个人工具箱",

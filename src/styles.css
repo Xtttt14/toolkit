@@ -24,7 +24,7 @@ button:disabled { cursor: not-allowed; opacity: 0.42; }
   width: 100%; height: 100%;
   display: grid;
   grid-template-columns: clamp(180px, 18vw, 240px) minmax(0, 1fr);
-  background: #f3f5f7; overflow: auto;
+  background: #f3f5f7; overflow: hidden;
 }
 
 .sidebar {
@@ -57,7 +57,7 @@ button:disabled { cursor: not-allowed; opacity: 0.42; }
 .workspace {
   min-width: 0; height: 100%;
   padding: clamp(16px, 2.5vw, 32px) clamp(20px, 3.5vw, 56px);
-  display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 14px; overflow: auto;
+  display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 14px; overflow: hidden;
 }
 
 .topbar { min-height: 60px; display: flex; align-items: flex-start; justify-content: flex-start; gap: 14px; }
@@ -72,7 +72,7 @@ h1 { margin: 0; color: #0f1720; font-size: clamp(32px, 4vw, 48px); line-height: 
   width: 100%; height: 100%;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   background: linear-gradient(160deg, #f0f4f8 0%, #e8edf2 100%);
-  padding: clamp(40px, 6vw, 80px); overflow: auto;
+  padding: clamp(24px, 4vw, 64px); overflow: hidden;
 }
 
 .home-header { text-align: center; margin-bottom: clamp(40px, 5vw, 64px); }
@@ -598,7 +598,7 @@ h1 { margin: 0; color: #0f1720; font-size: clamp(32px, 4vw, 48px); line-height: 
   to { transform:scale(1); filter:saturate(1); }
 }
 
-/* ═══════ Responsive layout hardening ═══════ */
+/* ═══════ Single-screen responsive layout ═══════ */
 .workspace,
 .drinking-inner,
 .todo-layout,
@@ -610,73 +610,61 @@ h1 { margin: 0; color: #0f1720; font-size: clamp(32px, 4vw, 48px); line-height: 
   max-width:100%;
 }
 
-.workspace {
-  scrollbar-gutter:stable;
-}
-
 @media (max-width: 1280px) {
   .progress-page {
-    grid-template-columns:minmax(0,1fr);
-    overflow:visible;
+    grid-template-columns:minmax(0,1fr) minmax(250px,0.52fr);
+    gap:14px;
   }
-  .hero-card { min-height:620px; }
   .info-column {
-    grid-template-columns:repeat(2,minmax(0,1fr));
-    grid-template-rows:auto auto;
-    overflow:visible;
+    grid-template-rows:minmax(104px,auto) minmax(112px,auto) minmax(0,1fr);
+    gap:12px;
   }
-  .info-column .history-card { grid-column:1 / -1; min-height:220px; }
 
   .history-page {
-    grid-template-columns:minmax(0,1fr);
-    grid-template-rows:auto;
-    overflow:visible;
+    grid-template-columns:minmax(0,1fr) minmax(240px,0.52fr);
+    grid-template-rows:minmax(0,1fr) minmax(120px,0.3fr);
+    gap:14px;
   }
-  .calendar-panel { min-height:590px; }
-  .history-side { min-height:260px; overflow:visible; }
   .stats-panel {
-    grid-column:1;
+    grid-column:1 / -1;
     grid-template-columns:repeat(2,minmax(0,1fr));
-    overflow:visible;
+    gap:14px;
   }
 }
 
 @media (max-width: 1100px) {
   .app-shell { grid-template-columns:minmax(0,1fr); overflow:hidden; }
   .sidebar { display:none; }
-  .workspace { padding:20px clamp(16px,4vw,34px); }
-  .cup-row { grid-template-columns:minmax(0,1fr); grid-auto-rows:auto; }
-  .cup-list { grid-auto-rows:auto; overflow:visible; }
+  .workspace { padding:clamp(12px,2.2vw,22px) clamp(16px,3vw,32px); }
+  .cup-row { grid-template-columns:minmax(0,0.86fr) minmax(260px,1fr); }
 }
 
 @media (max-width: 880px) {
   .workspace {
-    display:block;
-    height:100%;
-    padding:14px;
-    overflow:auto;
+    display:grid;
+    grid-template-rows:auto minmax(0,1fr);
+    height:100%; padding:12px;
+    overflow:hidden;
   }
-  .topbar { min-height:54px; margin-bottom:14px; }
+  .topbar { min-height:46px; margin-bottom:0; }
   .topbar p { margin-bottom:4px; font-size:13px; }
   .topbar h1 { font-size:clamp(27px,8vw,36px); }
   .icon-button { width:38px; height:38px; }
 
-  .home-page { justify-content:flex-start; padding:30px 18px; }
-  .home-header { margin:12px 0 28px; }
+  .home-page { justify-content:center; padding:18px; }
+  .home-header { margin:0 0 clamp(16px,3vh,28px); }
   .module-grid { max-width:520px; }
 
   .drinking-inner,
-  .todo-layout { overflow:visible; }
-  .drink-nav { width:100%; overflow-x:auto; }
+  .todo-layout { overflow:hidden; }
+  .drink-nav { width:100%; overflow:hidden; }
   .drink-nav button { flex:1 0 auto; justify-content:center; }
 
-  .hero-card { min-height:auto; padding:18px 14px; }
-  .hero-tools { align-items:stretch; flex-direction:column; }
-  .mode-switch, .target-edit { width:100%; justify-content:center; }
-  .water-ring { width:min(190px,58vw); }
-  .action-grid { width:100%; grid-template-columns:1fr; }
-  .progress-manual { width:100%; grid-template-columns:1fr; }
-  .progress-manual label, .time-select-group { grid-template-columns:46px minmax(0,1fr); }
+  .hero-card { min-height:0; padding:14px; }
+  .water-ring { width:clamp(112px,20vw,170px); }
+  .action-grid { width:100%; grid-template-columns:1.2fr 1fr 1fr; gap:8px; }
+  .progress-manual { width:100%; grid-template-columns:auto minmax(84px,1fr) minmax(78px,1fr) 64px; gap:6px; }
+  .progress-manual label, .time-select-group { grid-template-columns:28px minmax(0,1fr); }
   .info-column, .stats-panel { grid-template-columns:minmax(0,1fr); }
   .info-column .history-card { grid-column:1; }
 
@@ -684,7 +672,7 @@ h1 { margin: 0; color: #0f1720; font-size: clamp(32px, 4vw, 48px); line-height: 
   .cup-main { padding:0 12px; }
   .cup-edit { grid-template-columns:minmax(0,1fr) 92px 60px; }
 
-  .calendar-panel { min-height:500px; padding:14px 10px; }
+  .calendar-panel { min-height:0; padding:12px 10px; }
   .weekday-row, .calendar-grid { gap:4px; }
   .day-cell { padding:7px 5px; }
   .day-cell em { font-size:10px; }
@@ -702,7 +690,7 @@ h1 { margin: 0; color: #0f1720; font-size: clamp(32px, 4vw, 48px); line-height: 
   .todo-actions .todo-btn { flex:1; justify-content:center; }
   .todo-actions.selection-active .todo-selection-summary { flex:1 0 100%; justify-content:center; }
   .todo-header-row { display:none; }
-  .todo-list { overflow:visible; gap:8px; }
+  .todo-list { overflow:hidden; gap:6px; }
   .todo-row {
     grid-template-columns:30px minmax(0,1fr) auto;
     grid-template-rows:auto auto auto auto;
@@ -731,11 +719,10 @@ h1 { margin: 0; color: #0f1720; font-size: clamp(32px, 4vw, 48px); line-height: 
 
 @media (max-height: 720px) {
   .workspace {
-    display:block;
-    height:100%;
-    overflow:auto;
+    display:grid;
+    height:100%; overflow:hidden;
   }
-  .topbar { margin-bottom:12px; }
+  .topbar { min-height:44px; margin-bottom:0; }
   .drinking-inner,
   .todo-layout,
   .progress-page,
@@ -743,8 +730,33 @@ h1 { margin: 0; color: #0f1720; font-size: clamp(32px, 4vw, 48px); line-height: 
   .info-column,
   .history-side,
   .stats-panel {
-    overflow:visible;
+    overflow:hidden;
   }
-  .todo-list { min-height:220px; max-height:none; overflow:visible; }
-  .home-page { justify-content:flex-start; }
+  .drink-nav { transform:scale(0.9); transform-origin:left top; margin-bottom:-4px; }
+  .calendar-panel { padding:10px; gap:8px; }
+  .calendar-head { min-height:30px; }
+  .calendar-head strong { font-size:18px; }
+  .weekday-row, .calendar-grid { gap:4px; }
+  .day-cell { padding:clamp(3px,0.7vh,7px); }
+  .day-cell span { font-size:clamp(12px,1.6vw,15px); }
+  .day-cell em { min-height:12px; font-size:10px; }
+  .stats-panel { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .range-card { padding:10px 12px; gap:6px; }
+  .todo-list { min-height:0; max-height:none; overflow:hidden; }
+  .home-page { justify-content:center; }
+}
+
+/* Icons scale with both the available width and the window height. */
+.brand-mark svg { width:clamp(22px,2.15vw,34px); height:clamp(22px,2.15vw,34px); }
+.module-icon svg { width:clamp(26px,3.1vw,42px); height:clamp(26px,3.1vw,42px); }
+.icon-button svg { width:clamp(16px,1.35vw,22px); height:clamp(16px,1.35vw,22px); }
+.drink-nav svg, .cup-icon svg, .card-title svg, .todo-btn svg { width:clamp(13px,1.1vw,18px); height:clamp(13px,1.1vw,18px); }
+.water-core svg { width:clamp(24px,2.2vw,38px); height:clamp(24px,2.2vw,38px); }
+
+@media (max-height: 780px) {
+  .brand-mark { width:clamp(34px,4vw,46px); height:clamp(34px,4vw,46px); }
+  .module-card { min-height:clamp(96px,15vh,130px); padding:clamp(14px,2vh,24px); }
+  .module-icon { width:clamp(44px,5vw,60px); height:clamp(44px,5vw,60px); }
+  .hero-card { gap:clamp(6px,1vh,12px); }
+  .metric strong { font-size:clamp(38px,5.4vw,66px); }
 }
