@@ -80,7 +80,6 @@ let snoozedUntil = null;
 let lastReminder = null;
 let pendingClose = false;
 let isQuitting = false;
-let trayHintShown = false;
 let closeDialogOpen = false;
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
@@ -102,7 +101,7 @@ function initStores() {
           showClosePrompt: { type: "boolean", default: true },
           closeAction: { type: "string", enum: ["hide", "quit"], default: "hide" },
           widgetEnabled: { type: "boolean", default: true },
-          widgetMode: { type: "string", enum: ["pomodoro", "todo"], default: "pomodoro" },
+          widgetMode: { type: "string", enum: ["pomodoro", "todo", "finance"], default: "pomodoro" },
           widgetBounds: { type: ["object", "null"], default: null }
         }
       }
@@ -222,7 +221,9 @@ function normalizeAppSettings(settings = {}) {
     showClosePrompt: settings.showClosePrompt !== false,
     closeAction: settings.closeAction === "quit" ? "quit" : "hide",
     widgetEnabled: settings.widgetEnabled !== false,
-    widgetMode: settings.widgetMode === "todo" ? "todo" : "pomodoro",
+    widgetMode: ["pomodoro", "todo", "finance"].includes(settings.widgetMode)
+      ? settings.widgetMode
+      : "pomodoro",
     widgetBounds: bounds
   };
 }
@@ -478,7 +479,7 @@ function createWidgetWindow() {
     frame: false,
     transparent: true,
     resizable: true,
-    alwaysOnTop: true,
+    alwaysOnTop: false,
     skipTaskbar: true,
     hasShadow: true,
     show: false,
@@ -492,8 +493,6 @@ function createWidgetWindow() {
     }
   });
   widgetWindow.setMenuBarVisibility(false);
-  widgetWindow.setAlwaysOnTop(true, "floating");
-  widgetWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   widgetWindow.once("ready-to-show", () => widgetWindow?.showInactive());
   widgetWindow.on("moved", saveWidgetBounds);
   widgetWindow.on("resized", saveWidgetBounds);
@@ -617,17 +616,6 @@ function hideWindowToTray() {
     return false;
   }
   mainWindow.hide();
-  if (!trayHintShown) {
-    trayHintShown = true;
-    try {
-      tray.displayBalloon({
-        title: "个人工具箱仍在运行",
-        content: "窗口已最小化到系统托盘。右键托盘图标可退出，单击图标可恢复窗口；若图标被系统收起，可按Ctrl+Shift+T恢复窗口。"
-      });
-    } catch (error) {
-      console.warn("显示托盘提示失败：", error);
-    }
-  }
   broadcastState();
   return true;
 }
@@ -672,9 +660,7 @@ function saveFinanceData(data) {
 }
 
 function broadcastFinance() {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send("finance:changed", getFinanceData());
-  }
+  sendToAppWindows("finance:changed", getFinanceData());
 }
 
 // ═══════ 番茄钟逻辑 ═══════

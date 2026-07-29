@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  ArrowLeft, Check, Info, LayoutPanelTop, ListTodo, LogOut,
+  ArrowLeft, Calculator, Check, Info, LayoutPanelTop, ListTodo, LogOut,
   Settings, ShieldCheck, Timer
 } from "lucide-react";
 
@@ -99,17 +99,20 @@ export default function AppSettings() {
             <div><span>DESKTOP WIDGET</span><h2>桌面组件</h2></div>
           </header>
           <div className="app-setting-row">
-            <div><strong>显示桌面组件</strong><p>组件独立于主窗口，隐藏到托盘后仍会固定显示。</p></div>
+            <div><strong>显示桌面组件</strong><p>组件独立于主窗口，隐藏到托盘后仍会留在桌面，并由其他窗口自然遮挡。</p></div>
             <SettingSwitch checked={settings.widgetEnabled} onChange={value => update({ widgetEnabled: value })} label="显示桌面组件" />
           </div>
           <div className="app-setting-row vertical">
             <div><strong>默认显示内容</strong><p>也可以直接在组件顶部随时切换。</p></div>
-            <div className="app-setting-choice">
+            <div className="app-setting-choice widget-mode-choice">
               <button className={settings.widgetMode === "pomodoro" ? "active" : ""} onClick={() => update({ widgetMode: "pomodoro" })}>
                 <Timer size={17} /><span>番茄钟</span>
               </button>
               <button className={settings.widgetMode === "todo" ? "active" : ""} onClick={() => update({ widgetMode: "todo" })}>
                 <ListTodo size={17} /><span>Todo列表</span>
+              </button>
+              <button className={settings.widgetMode === "finance" ? "active" : ""} onClick={() => update({ widgetMode: "finance" })}>
+                <Calculator size={17} /><span>记账</span>
               </button>
             </div>
           </div>
