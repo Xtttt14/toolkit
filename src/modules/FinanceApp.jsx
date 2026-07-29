@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, BarChart3, CalendarDays, Landmark, ReceiptText } from "lucide-react";
+import { ArrowLeft, BarChart3, Calculator, CalendarDays, ReceiptText } from "lucide-react";
 import FinanceView from "./finance/FinanceView.jsx";
 
 const pages = [
@@ -26,8 +26,8 @@ export default function FinanceApp() {
     <main className="app-shell finance-shell">
       <aside className="sidebar finance-sidebar">
         <div className="brand">
-          <span className="brand-mark finance-brand-mark" aria-hidden="true">
-            <Landmark size={25} strokeWidth={1.9} />
+          <span className="brand-mark internal-module-mark" aria-hidden="true">
+            <Calculator size={27} strokeWidth={1.8} />
           </span>
           <div>
             <strong>记账助手</strong>

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, CupSoda } from "lucide-react";
 import DrinkingView from "./drinking/DrinkingView.jsx";
 
 export default function DrinkingApp() {
@@ -16,14 +16,11 @@ export default function DrinkingApp() {
   if (!state) return null;
 
   return (
-    <main className="app-shell">
+    <main className="app-shell drinking-shell">
       <aside className="sidebar">
         <div className="brand">
-          <span className="brand-mark">
-            <svg width="34" height="34" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect width="32" height="32" rx="8" fill="#1597ff"/>
-              <path d="M16 6c3.7 4.4 6.4 8.1 6.4 12a6.4 6.4 0 0 1-12.8 0C9.6 14.1 12.3 10.4 16 6z" fill="white"/>
-            </svg>
+          <span className="brand-mark internal-module-mark" aria-hidden="true">
+            <CupSoda size={27} strokeWidth={1.8} />
           </span>
           <div>
             <strong>饮水提醒</strong>

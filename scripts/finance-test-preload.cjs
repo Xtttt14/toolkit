@@ -63,3 +63,59 @@ contextBridge.exposeInMainWorld("financeApi", {
     return () => listeners.delete(callback);
   }
 });
+
+const waterState = {
+  date: key(today),
+  settings: {
+    targetCups: 8,
+    cupProfiles: [{ id: "cup-300", name: "日常水杯", ml: 300 }],
+    selectedCupId: "cup-300",
+    hasChosenCup: true,
+    targetCupsByCupId: { "cup-300": 8 },
+    workStart: "09:30",
+    workEnd: "18:30",
+    staleMinutes: 60,
+    repeatUntilLogged: true,
+    snoozeMinutes: 15,
+    showClosePrompt: true,
+    closeAction: "hide",
+    progressMode: "ml"
+  },
+  selectedCup: { id: "cup-300", name: "日常水杯", ml: 300 },
+  today: { entries: [], cups: 0, totalMl: 0, targetMl: 2400, lastEntry: null },
+  history: { days: {} }
+};
+contextBridge.exposeInMainWorld("waterApi", {
+  getState: async () => structuredClone(waterState),
+  addDrink: async () => structuredClone(waterState),
+  undoDrink: async () => structuredClone(waterState),
+  saveSettings: async () => structuredClone(waterState),
+  requestClose: async () => {},
+  getRuntimeStatus: async () => ({}),
+  resolveCloseChoice: async () => {},
+  onStateChanged: () => () => {},
+  onClosePrompt: () => () => {}
+});
+
+const todoData = {
+  tags: ["工作", "个人"],
+  tasks: [
+    {
+      id: "task-1", title: "整理本周计划", description: "确认优先事项", priority: "P1",
+      tags: ["工作"], dueDate: new Date(today.getTime() + 86400000).toISOString(),
+      reminderMinutes: 30, completed: false, completedAt: null,
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), subtasks: []
+    }
+  ]
+};
+contextBridge.exposeInMainWorld("todoApi", {
+  getAll: async () => structuredClone(todoData),
+  add: async () => structuredClone(todoData),
+  update: async () => structuredClone(todoData),
+  delete: async () => structuredClone(todoData),
+  toggleComplete: async () => structuredClone(todoData),
+  toggleSubtask: async () => structuredClone(todoData),
+  addTag: async () => structuredClone(todoData),
+  deleteTag: async () => structuredClone(todoData),
+  onChanged: () => () => {}
+});

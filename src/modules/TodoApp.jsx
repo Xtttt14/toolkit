@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, ListTodo } from "lucide-react";
+import { ArrowLeft, CheckSquare } from "lucide-react";
 import TodoView from "./todo/TodoView.jsx";
 
 export default function TodoApp() {
@@ -16,11 +16,11 @@ export default function TodoApp() {
   if (!data) return null;
 
   return (
-    <main className="app-shell">
+    <main className="app-shell todo-shell">
       <aside className="sidebar">
         <div className="brand">
-          <span className="brand-mark todo-brand-mark" aria-hidden="true">
-            <ListTodo size={26} strokeWidth={2.1} />
+          <span className="brand-mark internal-module-mark" aria-hidden="true">
+            <CheckSquare size={27} strokeWidth={1.8} />
           </span>
           <div>
             <strong>待办清单</strong>

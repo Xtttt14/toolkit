@@ -25,6 +25,39 @@ async function inspect(window, name) {
   return metrics;
 }
 
+async function inspectTheme(window, route, name) {
+  await window.loadURL(`http://127.0.0.1:5173/#/${route}`);
+  await new Promise(resolve => setTimeout(resolve, 450));
+  const metrics = await inspect(window, name);
+  metrics.theme = await window.webContents.executeJavaScript(`(() => {
+    const shell = document.querySelector(".app-shell");
+    const style = shell ? getComputedStyle(shell) : null;
+    const tagButtons = [...document.querySelectorAll(".tag-grid button")];
+    const ratios = tagButtons.map(button => {
+      const rect = button.getBoundingClientRect();
+      return rect.height ? rect.width / rect.height : 0;
+    });
+    const rects = tagButtons.map(button => button.getBoundingClientRect());
+    const overlaps = rects.flatMap((rect, index) => rects.slice(index + 1).map(other => (
+      Math.max(0, Math.min(rect.right, other.right) - Math.max(rect.left, other.left))
+      * Math.max(0, Math.min(rect.bottom, other.bottom) - Math.max(rect.top, other.top))
+    )));
+    return {
+      backgroundImage: style?.backgroundImage || "",
+      brandIconPaths: document.querySelectorAll(".internal-module-mark svg path").length,
+      tagCount: tagButtons.length,
+      tagWidthMin: rects.length ? Math.min(...rects.map(rect => rect.width)) : null,
+      tagWidthMax: rects.length ? Math.max(...rects.map(rect => rect.width)) : null,
+      tagHeightMin: rects.length ? Math.min(...rects.map(rect => rect.height)) : null,
+      tagHeightMax: rects.length ? Math.max(...rects.map(rect => rect.height)) : null,
+      tagRatioMin: ratios.length ? Math.min(...ratios) : null,
+      tagRatioMax: ratios.length ? Math.max(...ratios) : null,
+      tagOverlapMax: overlaps.length ? Math.max(...overlaps) : 0
+    };
+  })()`);
+  return metrics;
+}
+
 app.whenReady().then(async () => {
   const results = {};
   const consoleErrors = [];
@@ -85,6 +118,25 @@ app.whenReady().then(async () => {
       saved: document.body.innerText.includes("12.34"),
       message: document.querySelector(".save-message")?.textContent
     };
+  })()`);
+  window.setSize(1280, 820);
+  results.drinkingTheme = await inspectTheme(window, "drinking", "drinking-warm-1280x820");
+  results.todoTheme = await inspectTheme(window, "todo", "todo-warm-1280x820");
+  results.financeTag1280 = await inspectTheme(window, "finance", "finance-square-1280x820");
+  window.setSize(960, 640);
+  await new Promise(resolve => setTimeout(resolve, 250));
+  results.financeTag960 = await inspect(window, "finance-square-960x640");
+  results.financeTag960.theme = await window.webContents.executeJavaScript(`(() => {
+    const ratios = [...document.querySelectorAll(".tag-grid button")].map(button => {
+      const rect = button.getBoundingClientRect();
+      return rect.height ? rect.width / rect.height : 0;
+    });
+    const rects = [...document.querySelectorAll(".tag-grid button")].map(button => button.getBoundingClientRect());
+    const overlaps = rects.flatMap((rect, index) => rects.slice(index + 1).map(other => (
+      Math.max(0, Math.min(rect.right, other.right) - Math.max(rect.left, other.left))
+      * Math.max(0, Math.min(rect.bottom, other.bottom) - Math.max(rect.top, other.top))
+    )));
+    return { tagRatioMin:Math.min(...ratios), tagRatioMax:Math.max(...ratios), tagOverlapMax:Math.max(0,...overlaps) };
   })()`);
 
   results.consoleErrors = consoleErrors;

@@ -219,12 +219,14 @@ function ProgressView({ state, setState, percent, remainingCups, remainingMl, up
         <div className="water-ring" style={{ "--percent": `${percent}%` }}>
           <div className="water-core"><Droplets size={36} strokeWidth={1.6} /></div>
         </div>
-        <div className="metric">
-          <strong>{displayValue}</strong>
-          <span>{state.settings.progressMode === "cups" ? "杯" : "ml"}</span>
+        <div className="metric-stack">
+          <div className="metric">
+            <strong>{displayValue}</strong>
+            <span>{state.settings.progressMode === "cups" ? "杯" : "ml"}</span>
+          </div>
+          <p className="metric-sub">当前杯子 {state.selectedCup.name} · {state.selectedCup.ml}ml/杯 · {state.today.cups}/{state.settings.targetCups}杯 · {state.today.totalMl}/{state.today.targetMl}ml</p>
+          <div className="progress-line"><span style={{ width: `${percent}%` }} /></div>
         </div>
-        <p className="metric-sub">当前杯子 {state.selectedCup.name} · {state.selectedCup.ml}ml/杯 · {state.today.cups}/{state.settings.targetCups}杯 · {state.today.totalMl}/{state.today.targetMl}ml</p>
-        <div className="progress-line"><span style={{ width: `${percent}%` }} /></div>
         <div className="action-grid">
           <button className="add-button" onClick={() => setState(window.waterApi.addDrink())}><CupSoda size={22} /><span>加一杯</span><em>{state.selectedCup.ml}ml</em></button>
           <button className="undo-button" onClick={() => setState(window.waterApi.undoDrink())} disabled={state.today.cups === 0}><Minus size={18} />撤销上一杯</button>

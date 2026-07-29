@@ -53,6 +53,9 @@ let mainWindow;
 let tray;
 let reminderTimer;
 let todoReminderTimer;
+let waterStartupTimer;
+let todoStartupTimer;
+let quitFallbackTimer;
 let snoozedUntil = null;
 let lastReminder = null;
 let pendingClose = false;
@@ -533,16 +536,46 @@ function createWindow() {
 function startReminderLoop() {
   clearInterval(reminderTimer);
   reminderTimer = setInterval(maybeWaterNotify, 60 * 1000);
-  setTimeout(maybeWaterNotify, 3000);
+  clearTimeout(waterStartupTimer);
+  waterStartupTimer = setTimeout(maybeWaterNotify, 3000);
   clearInterval(todoReminderTimer);
   todoReminderTimer = setInterval(maybeTodoNotify, 60 * 1000);
-  setTimeout(maybeTodoNotify, 5000);
+  clearTimeout(todoStartupTimer);
+  todoStartupTimer = setTimeout(maybeTodoNotify, 5000);
+}
+
+function stopBackgroundWork() {
+  clearInterval(reminderTimer);
+  clearInterval(todoReminderTimer);
+  clearTimeout(waterStartupTimer);
+  clearTimeout(todoStartupTimer);
+  reminderTimer = null;
+  todoReminderTimer = null;
+  waterStartupTimer = null;
+  todoStartupTimer = null;
+  globalShortcut.unregister("CommandOrControl+Shift+T");
+  if (tray && !tray.isDestroyed()) tray.destroy();
+  tray = null;
 }
 
 function quitApp() {
+  if (isQuitting) return;
   isQuitting = true;
   pendingClose = true;
-  app.quit();
+  // Leave the active close callback before tearing Electron down. Calling
+  // app.quit() synchronously from a prevented close event can leave the main
+  // process alive on Windows even though the window and tray are already gone.
+  setImmediate(() => {
+    stopBackgroundWork();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.removeAllListeners("close");
+      mainWindow.destroy();
+      mainWindow = null;
+    }
+    quitFallbackTimer = setTimeout(() => app.exit(0), 1500);
+    quitFallbackTimer.unref?.();
+    app.quit();
+  });
 }
 
 // ═══════ IPC 饮水 ═══════
@@ -829,6 +862,6 @@ app.on("activate", () => showWindow());
 app.on("before-quit", () => {
   isQuitting = true;
   pendingClose = true;
-  globalShortcut.unregister("CommandOrControl+Shift+T");
-  if (tray) { tray.destroy(); tray = null; }
+  stopBackgroundWork();
 });
+app.on("quit", () => clearTimeout(quitFallbackTimer));

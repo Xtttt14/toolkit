@@ -3,4 +3,6 @@ dist/
 release/
 release-*/
 tmp/
+tmp-*/
+*.log
 .codegraph/
