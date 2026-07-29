@@ -129,9 +129,44 @@ app.whenReady().then(async () => {
     expanded:Boolean(document.querySelector(".todo-expand")),
     steps:document.querySelectorAll(".todo-subtask-row").length,
     completed:document.querySelectorAll(".todo-subtask-row.completed").length,
+    columns:new Set([...document.querySelectorAll(".todo-subtask-row")].map(row => Math.round(row.getBoundingClientRect().left))).size,
+    taskDragHandles:document.querySelectorAll(".todo-drag-handle").length,
+    subtaskDragHandles:document.querySelectorAll(".todo-subtask-drag").length,
     progressWidth:document.querySelector(".todo-subtask-progress span")?.style.width || "",
     overflow:[document.documentElement.scrollWidth,document.documentElement.clientWidth,document.documentElement.scrollHeight,document.documentElement.clientHeight]
   }))()`);
+  results.todoReorder = await window.webContents.executeJavaScript(`(async () => {
+    const drag = async (source, target, clientY) => {
+      const transfer = new DataTransfer();
+      source.dispatchEvent(new DragEvent("dragstart", { bubbles:true, dataTransfer:transfer }));
+      await new Promise(resolve => setTimeout(resolve, 60));
+      target.dispatchEvent(new DragEvent("dragover", { bubbles:true, cancelable:true, clientY, dataTransfer:transfer }));
+      await new Promise(resolve => setTimeout(resolve, 60));
+      target.dispatchEvent(new DragEvent("drop", { bubbles:true, cancelable:true, clientY, dataTransfer:transfer }));
+      source.dispatchEvent(new DragEvent("dragend", { bubbles:true, dataTransfer:transfer }));
+      await new Promise(resolve => setTimeout(resolve, 180));
+    };
+    const subtaskRows = [...document.querySelectorAll(".todo-subtask-row")];
+    const lastSubtaskRect = subtaskRows.at(-1).getBoundingClientRect();
+    await drag(
+      subtaskRows[0].querySelector(".todo-subtask-drag"),
+      subtaskRows.at(-1),
+      lastSubtaskRect.bottom - 2
+    );
+    const taskBlocks = [...document.querySelectorAll(".todo-task-block")];
+    const lastTaskRow = taskBlocks.at(-1).querySelector(".todo-row");
+    const lastTaskRect = lastTaskRow.getBoundingClientRect();
+    await drag(
+      taskBlocks[0].querySelector(".todo-drag-handle"),
+      lastTaskRow,
+      lastTaskRect.bottom - 2
+    );
+    return {
+      taskOrder:[...document.querySelectorAll(".todo-task-block")].map(block => block.dataset.taskId),
+      subtaskOrder:[...document.querySelectorAll('[data-task-id="task-1"] .todo-subtask-row')].map(row => row.dataset.subtaskId)
+    };
+  })()`);
+  results.todoReordered = await inspect(window, "todo-reordered-1280x820");
   window.setSize(960, 640);
   await new Promise(resolve => setTimeout(resolve, 250));
   results.todoSubtasks960 = await inspect(window, "todo-subtasks-960x640");

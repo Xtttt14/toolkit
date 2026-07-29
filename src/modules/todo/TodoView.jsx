@@ -1,12 +1,21 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Plus, Search, Trash2, ChevronDown, ChevronUp,
-  Check, X, Calendar, Flag, AlertCircle, ListChecks, CheckCheck
+  Check, X, Calendar, Flag, AlertCircle, ListChecks, CheckCheck, GripVertical
 } from "lucide-react";
 
 const PRIORITIES = ["P0", "P1", "P2", "P3"];
 const PRIORITY_COLORS = { P0: "#e03131", P1: "#f08c00", P2: "#2f9e44", P3: "#868e96" };
 const PRIORITY_LABELS = { P0: "紧急", P1: "高", P2: "中", P3: "低" };
+
+function moveItem(ids, sourceId, targetId, placement = "before") {
+  if (sourceId === targetId) return ids;
+  const remaining = ids.filter(id => id !== sourceId);
+  const targetIndex = remaining.indexOf(targetId);
+  if (targetIndex === -1) return ids;
+  remaining.splice(targetIndex + (placement === "after" ? 1 : 0), 0, sourceId);
+  return remaining;
+}
 
 function formatDateInput(date) {
   if (!date) return "";
@@ -37,7 +46,7 @@ export default function TodoView({ data, setData }) {
   const tags = data?.tags || [];
 
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState("priority");
+  const [sortBy, setSortBy] = useState("manual");
   const [sortDir, setSortDir] = useState("asc");
   const [filterTag, setFilterTag] = useState(null);
   const [filterPriority, setFilterPriority] = useState(null);
@@ -49,6 +58,8 @@ export default function TodoView({ data, setData }) {
   const [selectionMode, setSelectionMode] = useState(false);
   const [tagInput, setTagInput] = useState("");
   const [error, setError] = useState("");
+  const [taskDrag, setTaskDrag] = useState(null);
+  const [subtaskDrag, setSubtaskDrag] = useState(null);
 
   function toggleSort(field) {
     if (sortBy === field) {
@@ -70,6 +81,7 @@ export default function TodoView({ data, setData }) {
     }
     if (filterTag) list = list.filter(t => t.tags.includes(filterTag));
     if (filterPriority) list = list.filter(t => t.priority === filterPriority);
+    if (sortBy === "manual") return list;
     // split completed and active
     const active = list.filter(t => !t.completed);
     const done = list.filter(t => t.completed);
@@ -158,6 +170,23 @@ export default function TodoView({ data, setData }) {
 
   async function updateTask(id, patch) {
     return runAction(() => window.todoApi.update(id, patch), "保存任务失败");
+  }
+
+  async function reorderTasks(sourceId, targetId, placement) {
+    const orderedIds = moveItem(filtered.map(task => task.id), sourceId, targetId, placement);
+    if (orderedIds.every((id, index) => id === filtered[index]?.id)) return;
+    setSortBy("manual");
+    setSortDir("asc");
+    await runAction(() => window.todoApi.reorderTasks(orderedIds), "调整任务顺序失败");
+  }
+
+  async function reorderSubtasks(task, sourceId, targetId, placement) {
+    const orderedIds = moveItem(task.subtasks.map(subtask => subtask.id), sourceId, targetId, placement);
+    if (orderedIds.every((id, index) => id === task.subtasks[index]?.id)) return;
+    await runAction(
+      () => window.todoApi.reorderSubtasks(task.id, orderedIds),
+      "调整子任务顺序失败"
+    );
   }
 
   // Edit modal
@@ -250,6 +279,7 @@ export default function TodoView({ data, setData }) {
 
       {/* Sort header */}
       <div className="todo-header-row">
+        <span className="todo-header-drag" title="拖拽调整任务顺序"><GripVertical size={14} /></span>
         <span className="todo-header-spacer" aria-hidden="true" />
         <button className="todo-sort-btn todo-header-title" onClick={() => toggleSort("title")}>
           任务名称 {sortIcon("title")}
@@ -273,11 +303,50 @@ export default function TodoView({ data, setData }) {
           </div>
         ) : (
           filtered.map(task => (
-            <React.Fragment key={task.id}>
+            <div
+              key={task.id}
+              data-task-id={task.id}
+              className={`todo-task-block ${taskDrag?.sourceId === task.id ? "dragging" : ""} ${taskDrag?.targetId === task.id ? `drag-over-${taskDrag.placement}` : ""}`}
+            >
               <div
                 className={`todo-row ${task.completed ? "completed" : ""} ${isOverdue(task.dueDate) && !task.completed ? "overdue" : ""} ${selectionMode ? "selecting" : ""} ${selectedIds.has(task.id) ? "selected" : ""}`}
                 onClick={selectionMode ? () => toggleSelect(task.id) : undefined}
+                onDragOver={(event) => {
+                  if (!taskDrag?.sourceId || taskDrag.sourceId === task.id) return;
+                  event.preventDefault();
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  setTaskDrag(previous => ({
+                    ...previous,
+                    targetId: task.id,
+                    placement: event.clientY < rect.top + rect.height / 2 ? "before" : "after"
+                  }));
+                }}
+                onDrop={async (event) => {
+                  event.preventDefault();
+                  if (!taskDrag?.sourceId || taskDrag.sourceId === task.id) return;
+                  const currentDrag = taskDrag;
+                  setTaskDrag(null);
+                  await reorderTasks(currentDrag.sourceId, task.id, currentDrag.placement);
+                }}
               >
+                <span
+                  className="todo-drag-handle"
+                  draggable={!selectionMode}
+                  role="button"
+                  tabIndex={selectionMode ? -1 : 0}
+                  title="拖拽调整任务顺序"
+                  aria-label={`拖拽调整${task.title}的顺序`}
+                  onClick={event => event.stopPropagation()}
+                  onDragStart={(event) => {
+                    event.stopPropagation();
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("text/plain", task.id);
+                    setTaskDrag({ sourceId: task.id, targetId: null, placement: "before" });
+                  }}
+                  onDragEnd={() => setTaskDrag(null)}
+                >
+                  <GripVertical size={17} />
+                </span>
                 {selectionMode ? (
                   <span
                     className="todo-selection-spacer"
@@ -381,13 +450,54 @@ export default function TodoView({ data, setData }) {
                     ) : (
                       <div className="todo-subtask-grid">
                         {task.subtasks.map((sub, index) => (
-                          <button
+                          <div
                             key={sub.id}
-                            type="button"
-                            className={`todo-subtask-row ${sub.completed ? "completed" : ""}`}
+                            data-subtask-id={sub.id}
+                            className={`todo-subtask-row ${sub.completed ? "completed" : ""} ${subtaskDrag?.sourceId === sub.id ? "dragging" : ""} ${subtaskDrag?.targetId === sub.id ? `drag-over-${subtaskDrag.placement}` : ""}`}
+                            role="button"
+                            tabIndex={0}
                             onClick={() => window.todoApi.toggleSubtask(task.id, sub.id)}
+                            onKeyDown={event => {
+                              if (event.key !== "Enter" && event.key !== " ") return;
+                              event.preventDefault();
+                              window.todoApi.toggleSubtask(task.id, sub.id);
+                            }}
+                            onDragOver={(event) => {
+                              if (subtaskDrag?.taskId !== task.id || subtaskDrag.sourceId === sub.id) return;
+                              event.preventDefault();
+                              const rect = event.currentTarget.getBoundingClientRect();
+                              setSubtaskDrag(previous => ({
+                                ...previous,
+                                targetId: sub.id,
+                                placement: event.clientY < rect.top + rect.height / 2 ? "before" : "after"
+                              }));
+                            }}
+                            onDrop={async (event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              if (subtaskDrag?.taskId !== task.id || subtaskDrag.sourceId === sub.id) return;
+                              const currentDrag = subtaskDrag;
+                              setSubtaskDrag(null);
+                              await reorderSubtasks(task, currentDrag.sourceId, sub.id, currentDrag.placement);
+                            }}
                             aria-pressed={sub.completed}
                           >
+                            <span
+                              className="todo-subtask-drag"
+                              draggable
+                              title="拖拽调整步骤顺序"
+                              aria-label={`拖拽调整${sub.title}的顺序`}
+                              onClick={event => event.stopPropagation()}
+                              onDragStart={(event) => {
+                                event.stopPropagation();
+                                event.dataTransfer.effectAllowed = "move";
+                                event.dataTransfer.setData("text/plain", sub.id);
+                                setSubtaskDrag({ taskId: task.id, sourceId: sub.id, targetId: null, placement: "before" });
+                              }}
+                              onDragEnd={() => setSubtaskDrag(null)}
+                            >
+                              <GripVertical size={16} />
+                            </span>
                             <span className="todo-subtask-index">
                               {sub.completed ? <Check size={15} /> : String(index + 1).padStart(2, "0")}
                             </span>
@@ -398,14 +508,14 @@ export default function TodoView({ data, setData }) {
                             <span className="todo-subtask-check" aria-hidden="true">
                               {sub.completed && <Check size={13} />}
                             </span>
-                          </button>
+                          </div>
                         ))}
                       </div>
                     )}
                   </div>
                 </div>
               )}
-            </React.Fragment>
+            </div>
           ))
         )}
       </div>

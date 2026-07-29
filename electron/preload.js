@@ -29,6 +29,8 @@ contextBridge.exposeInMainWorld("todoApi", {
   delete: (ids) => ipcRenderer.invoke("todo:delete", ids),
   toggleComplete: (id) => ipcRenderer.invoke("todo:toggleComplete", id),
   toggleSubtask: (taskId, subtaskId) => ipcRenderer.invoke("todo:toggleSubtask", { taskId, subtaskId }),
+  reorderTasks: (orderedIds) => ipcRenderer.invoke("todo:reorderTasks", orderedIds),
+  reorderSubtasks: (taskId, orderedIds) => ipcRenderer.invoke("todo:reorderSubtasks", { taskId, orderedIds }),
   addTag: (tag) => ipcRenderer.invoke("todo:addTag", tag),
   deleteTag: (tag) => ipcRenderer.invoke("todo:deleteTag", tag),
   onChanged: (callback) => {

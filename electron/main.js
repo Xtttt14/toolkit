@@ -698,6 +698,36 @@ ipcMain.handle("todo:toggleSubtask", (_, { taskId, subtaskId }) => {
   broadcastState();
   return getTodoData();
 });
+ipcMain.handle("todo:reorderTasks", (_, orderedIds) => {
+  const data = getTodoData();
+  const safeIds = normalizeStringList(orderedIds);
+  const taskById = new Map(data.tasks.map(task => [task.id, task]));
+  const reordered = safeIds.map(id => taskById.get(id)).filter(Boolean);
+  if (reordered.length < 2) return data;
+  let nextIndex = 0;
+  const reorderedIds = new Set(reordered.map(task => task.id));
+  data.tasks = data.tasks.map(task => (
+    reorderedIds.has(task.id) ? reordered[nextIndex++] : task
+  ));
+  saveTodoData(data);
+  broadcastState();
+  return getTodoData();
+});
+ipcMain.handle("todo:reorderSubtasks", (_, { taskId, orderedIds }) => {
+  const data = getTodoData();
+  const task = data.tasks.find(item => item.id === taskId);
+  if (!task) return data;
+  const safeIds = normalizeStringList(orderedIds);
+  if (safeIds.length !== task.subtasks.length) return data;
+  const subtaskById = new Map(task.subtasks.map(subtask => [subtask.id, subtask]));
+  const reordered = safeIds.map(id => subtaskById.get(id)).filter(Boolean);
+  if (reordered.length !== task.subtasks.length) return data;
+  task.subtasks = reordered;
+  task.updatedAt = new Date().toISOString();
+  saveTodoData(data);
+  broadcastState();
+  return getTodoData();
+});
 ipcMain.handle("todo:addTag", (_, tag) => {
   const data = getTodoData();
   const cleanTag = String(tag || "").trim();

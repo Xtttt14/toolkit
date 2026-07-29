@@ -110,6 +110,12 @@ const todoData = {
         { id: "sub-2", title: "完成页面实现", completed: false },
         { id: "sub-3", title: "执行回归检查", completed: false }
       ]
+    },
+    {
+      id: "task-2", title: "归档项目资料", description: "整理交付文件与会议记录", priority: "P2",
+      tags: ["工作"], dueDate: null, reminderMinutes: 30, completed: false, completedAt: null,
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      subtasks: []
     }
   ]
 };
@@ -123,6 +129,21 @@ contextBridge.exposeInMainWorld("todoApi", {
     const task = todoData.tasks.find(item => item.id === taskId);
     const subtask = task?.subtasks.find(item => item.id === subtaskId);
     if (subtask) subtask.completed = !subtask.completed;
+    return structuredClone(todoData);
+  },
+  reorderTasks: async (orderedIds) => {
+    const taskById = new Map(todoData.tasks.map(task => [task.id, task]));
+    const ordered = orderedIds.map(id => taskById.get(id)).filter(Boolean);
+    if (ordered.length === todoData.tasks.length) todoData.tasks = ordered;
+    return structuredClone(todoData);
+  },
+  reorderSubtasks: async (taskId, orderedIds) => {
+    const task = todoData.tasks.find(item => item.id === taskId);
+    if (task) {
+      const subtaskById = new Map(task.subtasks.map(subtask => [subtask.id, subtask]));
+      const ordered = orderedIds.map(id => subtaskById.get(id)).filter(Boolean);
+      if (ordered.length === task.subtasks.length) task.subtasks = ordered;
+    }
     return structuredClone(todoData);
   },
   addTag: async () => structuredClone(todoData),
