@@ -330,7 +330,7 @@ function EntryEditModal({ entry, data, onClose }) {
             <button type="button" className={type === "expense" ? "active expense" : ""} onClick={() => changeType("expense")}>支出</button>
             <button type="button" className={type === "income" ? "active income" : ""} onClick={() => changeType("income")}>收入</button>
           </div>
-          <label><span>金额</span><input autoFocus value={amount} inputMode="decimal" onChange={event => setAmount(event.target.value)} /></label>
+          <label><span>金额</span><input className="finance-amount-input" autoFocus value={amount} inputMode="decimal" onChange={event => setAmount(event.target.value)} /></label>
           <div className="calendar-edit-row">
             <label><span>日期</span><input type="date" value={date} onChange={event => setDate(event.target.value)} /></label>
             <label><span>标签</span><select value={tag} onChange={event => setTag(event.target.value)}>{tags.map(item => <option key={item}>{item}</option>)}</select></label>

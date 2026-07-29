@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, Notification, Tray, nativeImage } = require("electron");
+const { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, Notification, Tray, nativeImage, screen } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const Store = require("electron-store");
@@ -25,9 +25,16 @@ const defaultWaterSettings = {
   staleMinutes: 60,
   repeatUntilLogged: true,
   snoozeMinutes: 15,
+  progressMode: "cups"
+};
+
+// ─── 工具箱默认设置 ───
+const defaultAppSettings = {
   showClosePrompt: true,
   closeAction: "hide",
-  progressMode: "cups"
+  widgetEnabled: true,
+  widgetMode: "pomodoro",
+  widgetBounds: null
 };
 
 // ─── 待办 默认设置 ───
@@ -43,6 +50,7 @@ const defaultFinanceData = {
 };
 // ─── 番茄钟 默认数据 ───
 const defaultPomodoroData = {
+  tasks: [],
   sessions: [],
   tags: ["深度工作", "学习", "阅读"],
   active: null,
@@ -57,7 +65,9 @@ let waterStore;
 let todoStore;
 let financeStore;
 let pomodoroStore;
+let appStore;
 let mainWindow;
+let widgetWindow;
 let tray;
 let reminderTimer;
 let todoReminderTimer;
@@ -71,6 +81,7 @@ let lastReminder = null;
 let pendingClose = false;
 let isQuitting = false;
 let trayHintShown = false;
+let closeDialogOpen = false;
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
@@ -79,6 +90,32 @@ if (!hasSingleInstanceLock) {
 
 function initStores() {
   waterStore = new Store({ name: "water-data", defaults: { settings: defaultWaterSettings, days: {} } });
+  const legacyWaterSettings = waterStore.get("settings", {});
+  appStore = new Store({
+    name: "app-data",
+    defaults: { settings: defaultAppSettings },
+    schema: {
+      settings: {
+        type: "object",
+        default: defaultAppSettings,
+        properties: {
+          showClosePrompt: { type: "boolean", default: true },
+          closeAction: { type: "string", enum: ["hide", "quit"], default: "hide" },
+          widgetEnabled: { type: "boolean", default: true },
+          widgetMode: { type: "string", enum: ["pomodoro", "todo"], default: "pomodoro" },
+          widgetBounds: { type: ["object", "null"], default: null }
+        }
+      }
+    }
+  });
+  if (!appStore.get("_migratedFromWaterSettings", false)) {
+    appStore.set("settings", {
+      ...defaultAppSettings,
+      showClosePrompt: legacyWaterSettings.showClosePrompt ?? defaultAppSettings.showClosePrompt,
+      closeAction: legacyWaterSettings.closeAction === "quit" ? "quit" : "hide"
+    });
+    appStore.set("_migratedFromWaterSettings", true);
+  }
   todoStore = new Store({
     name: "todo-data",
     defaults: defaultTodoData,
@@ -106,6 +143,7 @@ function initStores() {
     name: "pomodoro-data",
     defaults: defaultPomodoroData,
     schema: {
+      tasks: { type: "array", default: [] },
       sessions: { type: "array", default: [] },
       tags: { type: "array", default: [] },
       active: { type: ["object", "null"], default: null },
@@ -152,9 +190,9 @@ function createAppMenu() {
       label: "文件",
       submenu: [
         { label: "显示主窗口", click: showWindow },
-        { label: "加一杯", click: () => addDrink({ source: "menu" }) },
+        { label: "设置…", accelerator: "CommandOrControl+,", click: () => navigateMainWindow("/settings") },
         { type: "separator" },
-        { label: "退出", accelerator: "Alt+F4", click: () => quitApp() }
+        { label: "退出", click: () => quitApp() }
       ]
     },
     {
@@ -169,6 +207,31 @@ function createAppMenu() {
       ]
     }
   ]));
+}
+
+function normalizeAppSettings(settings = {}) {
+  const bounds = settings.widgetBounds && typeof settings.widgetBounds === "object"
+    ? {
+      x: Number.isFinite(Number(settings.widgetBounds.x)) ? Math.round(Number(settings.widgetBounds.x)) : undefined,
+      y: Number.isFinite(Number(settings.widgetBounds.y)) ? Math.round(Number(settings.widgetBounds.y)) : undefined,
+      width: Math.max(320, Math.min(460, Math.round(Number(settings.widgetBounds.width) || 360))),
+      height: Math.max(340, Math.min(620, Math.round(Number(settings.widgetBounds.height) || 430)))
+    }
+    : null;
+  return {
+    showClosePrompt: settings.showClosePrompt !== false,
+    closeAction: settings.closeAction === "quit" ? "quit" : "hide",
+    widgetEnabled: settings.widgetEnabled !== false,
+    widgetMode: settings.widgetMode === "todo" ? "todo" : "pomodoro",
+    widgetBounds: bounds
+  };
+}
+
+function getAppSettings() {
+  return normalizeAppSettings({
+    ...defaultAppSettings,
+    ...(appStore?.get("settings", {}) || {})
+  });
 }
 
 // ─── 日期工具 ───
@@ -359,6 +422,125 @@ function maybeTodoNotify() {
 function getAssetPath(name) {
   return isDev ? path.join(__dirname, "assets", name) : path.join(process.resourcesPath, "assets", name);
 }
+
+function loadRendererRoute(window, route = "/") {
+  if (isDev) {
+    return window.loadURL(`http://127.0.0.1:5173/#${route}`);
+  }
+  return window.loadFile(path.join(__dirname, "../dist/index.html"), { hash: route });
+}
+
+function sendToAppWindows(channel, payload) {
+  for (const window of [mainWindow, widgetWindow]) {
+    if (window && !window.isDestroyed()) window.webContents.send(channel, payload);
+  }
+}
+
+function navigateMainWindow(route = "/") {
+  showWindow();
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const send = () => mainWindow?.webContents.send("app:navigate", route);
+  if (mainWindow.webContents.isLoading()) mainWindow.webContents.once("did-finish-load", send);
+  else send();
+}
+
+function getVisibleWidgetBounds(savedBounds) {
+  const fallback = { width: 360, height: 430 };
+  if (!savedBounds || savedBounds.x === undefined || savedBounds.y === undefined) {
+    const area = screen.getPrimaryDisplay().workArea;
+    return {
+      ...fallback,
+      x: area.x + area.width - fallback.width - 28,
+      y: area.y + Math.max(28, Math.round((area.height - fallback.height) / 2))
+    };
+  }
+  const candidate = { ...fallback, ...savedBounds };
+  const visible = screen.getAllDisplays().some(display => {
+    const area = display.workArea;
+    return candidate.x < area.x + area.width - 80
+      && candidate.x + candidate.width > area.x + 80
+      && candidate.y < area.y + area.height - 80
+      && candidate.y + candidate.height > area.y + 80;
+  });
+  return visible ? candidate : getVisibleWidgetBounds(null);
+}
+
+function createWidgetWindow() {
+  const settings = getAppSettings();
+  if (!settings.widgetEnabled || (widgetWindow && !widgetWindow.isDestroyed())) return widgetWindow;
+  const bounds = getVisibleWidgetBounds(settings.widgetBounds);
+  widgetWindow = new BrowserWindow({
+    ...bounds,
+    minWidth: 320,
+    minHeight: 340,
+    maxWidth: 460,
+    maxHeight: 620,
+    frame: false,
+    transparent: true,
+    resizable: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: true,
+    show: false,
+    title: "工具箱桌面组件",
+    icon: getAssetPath("app.ico"),
+    backgroundColor: "#00000000",
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+  widgetWindow.setMenuBarVisibility(false);
+  widgetWindow.setAlwaysOnTop(true, "floating");
+  widgetWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  widgetWindow.once("ready-to-show", () => widgetWindow?.showInactive());
+  widgetWindow.on("moved", saveWidgetBounds);
+  widgetWindow.on("resized", saveWidgetBounds);
+  widgetWindow.on("closed", () => { widgetWindow = null; updateTray(); });
+  widgetWindow.webContents.on("did-fail-load", (_, errorCode, errorDescription) => {
+    console.error(`桌面组件加载失败 (${errorCode})：${errorDescription}`);
+  });
+  loadRendererRoute(widgetWindow, "/widget");
+  return widgetWindow;
+}
+
+function saveWidgetBounds() {
+  if (!appStore || !widgetWindow || widgetWindow.isDestroyed()) return;
+  const settings = getAppSettings();
+  appStore.set("settings", { ...settings, widgetBounds: widgetWindow.getBounds() });
+}
+
+function closeWidget({ disable = false } = {}) {
+  if (disable && appStore) {
+    const settings = getAppSettings();
+    appStore.set("settings", { ...settings, widgetEnabled: false });
+    broadcastAppSettings();
+  }
+  if (widgetWindow && !widgetWindow.isDestroyed()) widgetWindow.destroy();
+  widgetWindow = null;
+  updateTray();
+}
+
+function applyAppSettings(patch = {}) {
+  const current = getAppSettings();
+  const next = normalizeAppSettings({ ...current, ...(patch || {}) });
+  appStore.set("settings", next);
+  if (next.widgetEnabled) createWidgetWindow();
+  else closeWidget();
+  broadcastAppSettings();
+  updateTray();
+  return getAppSettings();
+}
+
+function broadcastAppSettings() {
+  if (!appStore) return;
+  sendToAppWindows("app:settings-changed", {
+    ...getAppSettings(),
+    version: app.getVersion()
+  });
+}
+
 function createTrayImage() {
   // Windows notification areas render multi-resolution ICO files most reliably.
   for (const name of ["app.ico", "app.png"]) {
@@ -397,6 +579,7 @@ function ensureTray() {
 function updateTray() {
   if (!tray || tray.isDestroyed()) return;
   const waterState = getWaterState();
+  const appSettings = getAppSettings();
   const percent = Math.min(100, Math.round((waterState.today.totalMl / Math.max(1, waterState.today.targetMl)) * 100));
   const { tasks } = getTodoData();
   const todoPending = tasks.filter(t => !t.completed).length;
@@ -409,11 +592,11 @@ function updateTray() {
     ...(focus ? [{ label: `专注中 · ${focus.title}`, enabled: false }] : []),
     { type: "separator" },
     { label: "显示主窗口", click: showWindow },
-    { label: `加一杯 (${waterState.selectedCup.ml}ml)`, click: () => addDrink({ source: "tray" }) },
     {
-      label: `重复上次容量 (${waterState.today.lastEntry?.ml || waterState.selectedCup.ml}ml)`,
-      click: () => addDrink({ source: "tray", ml: waterState.today.lastEntry?.ml || waterState.selectedCup.ml })
+      label: appSettings.widgetEnabled ? "隐藏桌面组件" : "显示桌面组件",
+      click: () => applyAppSettings({ widgetEnabled: !appSettings.widgetEnabled })
     },
+    { label: "设置…", click: () => navigateMainWindow("/settings") },
     { type: "separator" },
     { label: "退出", click: () => quitApp() }
   ]));
@@ -505,11 +688,29 @@ function normalizePomodoroSession(session = {}) {
     title: String(session.title || "未命名专注").trim().slice(0, 60) || "未命名专注",
     tags: normalizeStringList(session.tags).slice(0, 8).map(tag => tag.slice(0, 16)),
     mode: session.mode === "countup" ? "countup" : "countdown",
-    plannedSeconds: Math.max(60, Math.min(12 * 60 * 60, Math.round(Number(session.plannedSeconds) || 1800))),
+    plannedSeconds: session.mode === "countup"
+      ? null
+      : Math.max(60, Math.min(12 * 60 * 60, Math.round(Number(session.plannedSeconds) || 1800))),
     status: session.status === "abandoned" ? "abandoned" : "completed",
     startedAt,
     endedAt,
     durationSeconds: Math.max(0, Math.round(Number(session.durationSeconds) || 0))
+  };
+}
+
+function normalizePomodoroTask(task = {}) {
+  const mode = task.mode === "countup" ? "countup" : "countdown";
+  const now = new Date().toISOString();
+  return {
+    id: String(task.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`),
+    title: String(task.title || "").trim().slice(0, 60),
+    tags: normalizeStringList(task.tags).slice(0, 8).map(tag => tag.slice(0, 16)),
+    mode,
+    plannedSeconds: mode === "countup"
+      ? null
+      : Math.max(60, Math.min(12 * 60 * 60, Math.round(Number(task.plannedSeconds) || 1800))),
+    createdAt: task.createdAt || now,
+    updatedAt: task.updatedAt || now
   };
 }
 
@@ -518,7 +719,9 @@ function normalizePomodoroActive(active) {
   const startedAt = new Date(active.startedAt);
   if (Number.isNaN(startedAt.getTime())) return null;
   const mode = active.mode === "countup" ? "countup" : "countdown";
-  const plannedSeconds = Math.max(60, Math.min(12 * 60 * 60, Math.round(Number(active.plannedSeconds) || 1800)));
+  const plannedSeconds = mode === "countup"
+    ? null
+    : Math.max(60, Math.min(12 * 60 * 60, Math.round(Number(active.plannedSeconds) || 1800)));
   return {
     id: String(active.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`),
     title: String(active.title || "").trim().slice(0, 60),
@@ -533,6 +736,10 @@ function normalizePomodoroActive(active) {
 }
 
 function getPomodoroData() {
+  const tasks = pomodoroStore.get("tasks", [])
+    .map(normalizePomodoroTask)
+    .filter(task => task.title)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   const sessions = pomodoroStore.get("sessions", [])
     .map(normalizePomodoroSession)
     .filter(session => session.endedAt)
@@ -543,10 +750,13 @@ function getPomodoroData() {
     ...defaultPomodoroData.settings,
     ...(pomodoroStore.get("settings", {}) || {})
   };
-  return { version: 1, sessions, tags, active, settings, now: new Date().toISOString() };
+  return { version: 2, tasks, sessions, tags, active, settings, now: new Date().toISOString() };
 }
 
 function savePomodoroData(data) {
+  if (data.tasks !== undefined) {
+    pomodoroStore.set("tasks", data.tasks.map(normalizePomodoroTask).filter(task => task.title));
+  }
   if (data.sessions !== undefined) {
     pomodoroStore.set("sessions", data.sessions.map(normalizePomodoroSession).filter(session => session.endedAt));
   }
@@ -558,9 +768,7 @@ function savePomodoroData(data) {
 }
 
 function broadcastPomodoro() {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send("pomodoro:changed", getPomodoroData());
-  }
+  sendToAppWindows("pomodoro:changed", getPomodoroData());
   updateTray();
 }
 
@@ -604,10 +812,8 @@ function maybeFinishPomodoro() {
 function broadcastState() {
   const waterState = getWaterState();
   const todoData = getTodoData();
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send("state:changed", waterState);
-    mainWindow.webContents.send("todo:changed", todoData);
-  }
+  sendToAppWindows("state:changed", waterState);
+  sendToAppWindows("todo:changed", todoData);
   updateTray();
 }
 
@@ -628,24 +834,38 @@ function createWindow() {
     }
   });
   mainWindow.once("ready-to-show", () => mainWindow.show());
-  mainWindow.on("close", (event) => {
-    const settings = getWaterState().settings;
+  mainWindow.on("close", async (event) => {
+    const settings = getAppSettings();
     if (isQuitting || pendingClose) return;
     if (!settings.showClosePrompt) {
       if (settings.closeAction === "hide") { event.preventDefault(); hideWindowToTray(); return; }
       event.preventDefault(); quitApp(); return;
     }
     event.preventDefault();
-    const { response, checkboxChecked } = dialog.showMessageBoxSync(mainWindow, {
-      type: "question", buttons: ["隐藏到托盘", "退出程序", "取消"], defaultId: 0, cancelId: 2,
-      title: "关闭工具箱", message: "关闭工具箱？",
-      detail: "隐藏后会继续在托盘运行并按设置提醒。",
-      checkboxLabel: "不再询问", checkboxChecked: false
-    });
-    if (response === 2) return;
+    if (closeDialogOpen) return;
+    closeDialogOpen = true;
+    let result;
+    try {
+      result = await dialog.showMessageBox(mainWindow, {
+        type: "question", buttons: ["隐藏到托盘", "退出程序", "取消"], defaultId: 0, cancelId: 2,
+        title: "关闭工具箱", message: "关闭工具箱？",
+        detail: "隐藏后会继续在托盘运行并按设置提醒。",
+        checkboxLabel: "不再询问", checkboxChecked: false,
+        noLink: true
+      });
+    } finally {
+      closeDialogOpen = false;
+    }
+    const { response, checkboxChecked } = result;
+    if (response === 2) {
+      mainWindow?.show();
+      mainWindow?.focus();
+      return;
+    }
     const action = response === 0 ? "hide" : "quit";
     if (checkboxChecked) {
-      waterStore.set("settings", { ...settings, showClosePrompt: false, closeAction: action });
+      appStore.set("settings", { ...settings, showClosePrompt: false, closeAction: action });
+      broadcastAppSettings();
     }
     if (action === "hide") { hideWindowToTray(); return; }
     quitApp();
@@ -658,8 +878,7 @@ function createWindow() {
     console.error("页面进程异常退出：", details);
     if (!isQuitting) dialog.showErrorBox("工具箱页面异常", "页面进程异常退出，请重新启动工具箱。");
   });
-  if (isDev) { mainWindow.loadURL("http://127.0.0.1:5173"); }
-  else { mainWindow.loadFile(path.join(__dirname, "../dist/index.html")); }
+  loadRendererRoute(mainWindow);
   mainWindow.on("closed", () => { mainWindow = null; });
 }
 
@@ -691,6 +910,8 @@ function stopBackgroundWork() {
   globalShortcut.unregister("CommandOrControl+Shift+T");
   if (tray && !tray.isDestroyed()) tray.destroy();
   tray = null;
+  if (widgetWindow && !widgetWindow.isDestroyed()) widgetWindow.destroy();
+  widgetWindow = null;
 }
 
 function quitApp() {
@@ -739,15 +960,33 @@ ipcMain.handle("app:request-close", () => {
 });
 ipcMain.handle("app:runtime-status", () => ({
   trayReady: Boolean(tray && !tray.isDestroyed()),
-  windowVisible: Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible())
+  windowVisible: Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()),
+  widgetVisible: Boolean(widgetWindow && !widgetWindow.isDestroyed() && widgetWindow.isVisible())
 }));
 ipcMain.handle("app:resolve-close-choice", (_, choice) => {
   if (choice.remember) {
-    const settings = getWaterState().settings;
-    waterStore.set("settings", { ...settings, showClosePrompt: false, closeAction: choice.action });
+    const settings = getAppSettings();
+    appStore.set("settings", { ...settings, showClosePrompt: false, closeAction: choice.action });
+    broadcastAppSettings();
   }
   if (choice.action === "hide") return hideWindowToTray() ? "hidden" : "visible";
   quitApp(); return "quit";
+});
+ipcMain.handle("app:get-settings", () => ({
+  ...getAppSettings(),
+  version: app.getVersion()
+}));
+ipcMain.handle("app:save-settings", (_, patch) => ({
+  ...applyAppSettings(patch),
+  version: app.getVersion()
+}));
+ipcMain.handle("app:open-main", (_, route) => {
+  navigateMainWindow(typeof route === "string" ? route : "/");
+  return true;
+});
+ipcMain.handle("widget:close", () => {
+  closeWidget({ disable: true });
+  return true;
 });
 
 // ═══════ IPC 待办 ═══════
@@ -892,13 +1131,16 @@ ipcMain.handle("pomodoro:start", (_, payload = {}) => {
   if (data.active) throw new Error("已有正在进行的专注任务");
   const title = String(payload.title || "").trim().slice(0, 60);
   if (!title) throw new Error("任务名称不能为空");
-  const plannedSeconds = Math.max(60, Math.min(12 * 60 * 60, Math.round(Number(payload.plannedSeconds) || 1800)));
+  const mode = payload.mode === "countup" ? "countup" : "countdown";
+  const plannedSeconds = mode === "countup"
+    ? null
+    : Math.max(60, Math.min(12 * 60 * 60, Math.round(Number(payload.plannedSeconds) || 1800)));
   const startedAt = new Date();
   const active = normalizePomodoroActive({
     id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
     title,
     tags: payload.tags,
-    mode: payload.mode,
+    mode,
     plannedSeconds,
     startedAt: startedAt.toISOString()
   });
@@ -909,6 +1151,41 @@ ipcMain.handle("pomodoro:start", (_, payload = {}) => {
   return getPomodoroData();
 });
 ipcMain.handle("pomodoro:finish", (_, status) => finishPomodoro(status === "abandoned" ? "abandoned" : "completed"));
+ipcMain.handle("pomodoro:task-add", (_, payload = {}) => {
+  const data = getPomodoroData();
+  const task = normalizePomodoroTask(payload);
+  if (!task.title) throw new Error("任务名称不能为空");
+  data.tasks.unshift(task);
+  data.tags = normalizeStringList([...data.tags, ...task.tags]);
+  savePomodoroData(data);
+  broadcastPomodoro();
+  return getPomodoroData();
+});
+ipcMain.handle("pomodoro:task-update", (_, { id, patch } = {}) => {
+  const data = getPomodoroData();
+  const index = data.tasks.findIndex(task => task.id === String(id));
+  if (index === -1) return data;
+  const next = normalizePomodoroTask({
+    ...data.tasks[index],
+    ...(patch || {}),
+    id: data.tasks[index].id,
+    createdAt: data.tasks[index].createdAt,
+    updatedAt: new Date().toISOString()
+  });
+  if (!next.title) throw new Error("任务名称不能为空");
+  data.tasks[index] = next;
+  data.tags = normalizeStringList([...data.tags, ...next.tags]);
+  savePomodoroData(data);
+  broadcastPomodoro();
+  return getPomodoroData();
+});
+ipcMain.handle("pomodoro:task-delete", (_, id) => {
+  const data = getPomodoroData();
+  data.tasks = data.tasks.filter(task => task.id !== String(id));
+  savePomodoroData(data);
+  broadcastPomodoro();
+  return getPomodoroData();
+});
 ipcMain.handle("pomodoro:addTag", (_, tag) => {
   const data = getPomodoroData();
   const clean = String(tag || "").trim().slice(0, 16);
@@ -922,6 +1199,7 @@ ipcMain.handle("pomodoro:addTag", (_, tag) => {
 ipcMain.handle("pomodoro:deleteTag", (_, tag) => {
   const data = getPomodoroData();
   data.tags = data.tags.filter(item => item !== String(tag));
+  data.tasks = data.tasks.map(task => ({ ...task, tags: task.tags.filter(item => item !== String(tag)) }));
   savePomodoroData(data);
   broadcastPomodoro();
   return getPomodoroData();
@@ -1080,6 +1358,7 @@ app.whenReady().then(() => {
   ensureTray();
   globalShortcut.register("CommandOrControl+Shift+T", showWindow);
   createWindow();
+  createWidgetWindow();
   updateTray();
   startReminderLoop();
 });

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, BarChart3, Check, ChevronRight, Clock3, Expand,
-  Flag, Focus, LineChart, Plus, RotateCcw, Tag, Timer, Trash2, X
+  Flag, Focus, LineChart, Pencil, Plus, RotateCcw, Settings2, Tag, Timer, Trash2, X
 } from "lucide-react";
 
 const PRESETS = [30, 60, 90, 120];
@@ -26,6 +26,21 @@ function formatMinutes(seconds) {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return rest ? `${hours}小时${rest}分` : `${hours}小时`;
+}
+
+function DurationValue({ seconds }) {
+  const minutes = Math.round((Number(seconds) || 0) / 60);
+  if (minutes < 60) {
+    return <span className="pomo-duration-value"><b>{minutes}</b><em>分钟</em></span>;
+  }
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return (
+    <span className="pomo-duration-value">
+      <b>{hours}</b><em>小时</em>
+      {rest > 0 && <><b>{rest}</b><em>分</em></>}
+    </span>
+  );
 }
 
 function localDateKey(value = new Date()) {
@@ -71,7 +86,11 @@ function useTicker(active) {
   if (!active) return { elapsed: 0, display: 0, progress: 0 };
   const elapsed = Math.max(0, Math.floor((now - new Date(active.startedAt).getTime()) / 1000));
   const display = active.mode === "countdown" ? Math.max(0, active.plannedSeconds - elapsed) : elapsed;
-  return { elapsed, display, progress: Math.min(1, elapsed / Math.max(1, active.plannedSeconds)) };
+  return {
+    elapsed,
+    display,
+    progress: active.mode === "countup" ? 0 : Math.min(1, elapsed / Math.max(1, active.plannedSeconds))
+  };
 }
 
 function StatBlock({ label, value, note }) {
@@ -91,7 +110,7 @@ function TimerFace({ active, clockStyle, timer, compact = false }) {
       <div className={`pomo-face minimal ${compact ? "compact" : ""}`}>
         <span>{active.mode === "countdown" ? "剩余时间" : "已专注"}</span>
         <strong>{formatClock(timer.display)}</strong>
-        <i style={{ width: `${Math.max(2, timer.progress * 100)}%` }} />
+        {active.mode === "countdown" && <i style={{ width: `${Math.max(2, timer.progress * 100)}%` }} />}
       </div>
     );
   }
@@ -109,7 +128,7 @@ function TimerFace({ active, clockStyle, timer, compact = false }) {
       <div>
         <span>{active.mode === "countdown" ? "剩余" : "专注"}</span>
         <strong>{formatClock(timer.display)}</strong>
-        <small>{Math.round(timer.progress * 100)}%</small>
+        <small>{active.mode === "countdown" ? `${Math.round(timer.progress * 100)}%` : "正计时"}</small>
       </div>
     </div>
   );
@@ -138,7 +157,7 @@ function ImmersiveView({ data, timer, onExit, onFinish, onAbandon, onSettings })
         <TimerFace active={active} timer={timer} clockStyle={settings.clockStyle} />
         <div className="immersive-actions">
           {active.mode === "countup" && <button className="finish" onClick={onFinish}><Check size={19} />完成专注</button>}
-          <button className="abandon" onClick={onAbandon}><Flag size={18} />放弃</button>
+          {active.mode === "countdown" && <button className="abandon" onClick={onAbandon}><Flag size={18} />放弃</button>}
         </div>
       </main>
       <footer>
@@ -167,98 +186,146 @@ function ImmersiveView({ data, timer, onExit, onFinish, onAbandon, onSettings })
   );
 }
 
-function Composer({ data, onStart, busy }) {
-  const [title, setTitle] = useState("");
-  const [mode, setMode] = useState("countdown");
-  const [minutes, setMinutes] = useState(30);
-  const [custom, setCustom] = useState("");
-  const [tags, setTags] = useState([]);
+function TaskEditor({ data, task, onClose }) {
+  const [title, setTitle] = useState(task?.title || "");
+  const [mode, setMode] = useState(task?.mode || "countdown");
+  const initialMinutes = task?.plannedSeconds ? Math.round(task.plannedSeconds / 60) : 30;
+  const [minutes, setMinutes] = useState(PRESETS.includes(initialMinutes) ? initialMinutes : 30);
+  const [custom, setCustom] = useState(PRESETS.includes(initialMinutes) ? "" : String(initialMinutes));
+  const [tags, setTags] = useState(task?.tags || []);
   const [newTag, setNewTag] = useState("");
+  const [addingTag, setAddingTag] = useState(false);
+  const [managingTags, setManagingTags] = useState(false);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const submit = async event => {
     event.preventDefault();
     if (!title.trim()) {
-      setError("写下这次唯一要完成的事");
+      setError("请输入任务名称");
       return;
     }
-    const duration = Number(custom) || minutes;
-    if (duration < 1 || duration > 720) {
+    const duration = mode === "countdown" ? Number(custom) || minutes : null;
+    if (mode === "countdown" && (duration < 1 || duration > 720)) {
       setError("时长应在1—720分钟之间");
       return;
     }
+    setSaving(true);
     setError("");
-    await onStart({ title: title.trim(), mode, plannedSeconds: duration * 60, tags });
+    try {
+      const payload = {
+        title: title.trim(),
+        mode,
+        plannedSeconds: mode === "countdown" ? duration * 60 : null,
+        tags
+      };
+      if (task) await window.pomodoroApi.updateTask(task.id, payload);
+      else await window.pomodoroApi.addTask(payload);
+      onClose();
+    } catch (saveError) {
+      setError(saveError.message || "保存任务失败");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const addTag = async event => {
-    event.preventDefault();
+  const addTag = async () => {
     const clean = newTag.trim();
     if (!clean) return;
     await window.pomodoroApi.addTag(clean);
     setTags(current => [...new Set([...current, clean])]);
     setNewTag("");
+    setAddingTag(false);
+  };
+
+  const deleteTag = async tag => {
+    if (!confirm(`删除标签“${tag}”？已有历史记录中的标签会保留。`)) return;
+    await window.pomodoroApi.deleteTag(tag);
+    setTags(current => current.filter(item => item !== tag));
   };
 
   return (
-    <form className="pomo-composer" onSubmit={submit}>
-      <header>
-        <span>NEW SESSION</span>
-        <h2>现在，专注于什么？</h2>
-      </header>
-      <label className="pomo-title-field">
-        <span>任务名称</span>
-        <input value={title} onChange={event => setTitle(event.target.value)} maxLength={60} placeholder="例如：完成项目方案初稿" autoFocus />
-      </label>
-      <div className="pomo-section">
-        <span className="field-label">计时方式</span>
-        <div className="pomo-mode-switch">
-          <button type="button" className={mode === "countdown" ? "active" : ""} onClick={() => setMode("countdown")}>倒计时</button>
-          <button type="button" className={mode === "countup" ? "active" : ""} onClick={() => setMode("countup")}>正计时</button>
+    <div className="pomo-task-modal-backdrop" onMouseDown={event => event.target === event.currentTarget && onClose()}>
+      <form className="pomo-task-modal" onSubmit={submit}>
+        <header>
+          <div><span>{task ? "EDIT FOCUS TASK" : "NEW FOCUS TASK"}</span><h2>{task ? "编辑专注任务" : "新建专注任务"}</h2></div>
+          <button type="button" onClick={onClose} aria-label="关闭"><X size={19} /></button>
+        </header>
+        <label className="pomo-title-field">
+          <span>任务名称</span>
+          <input value={title} onChange={event => setTitle(event.target.value)} maxLength={60} placeholder="例如：完成项目方案初稿" autoFocus />
+        </label>
+        <div className="pomo-section">
+          <span className="field-label">计时方式</span>
+          <div className="pomo-mode-switch">
+            <button type="button" className={mode === "countdown" ? "active" : ""} onClick={() => setMode("countdown")}>倒计时</button>
+            <button type="button" className={mode === "countup" ? "active" : ""} onClick={() => setMode("countup")}>正计时</button>
+          </div>
+          <p>{mode === "countdown" ? "时间归零后自动完成并发送系统通知" : "从00:00开始计时，由你手动标记完成"}</p>
         </div>
-        <p>{mode === "countdown" ? "时间归零后自动完成并通知你" : "由你手动完成，预设时长用于显示目标进度"}</p>
-      </div>
-      <div className="pomo-section">
-        <span className="field-label">计划时长</span>
-        <div className="duration-presets">
-          {PRESETS.map(value => (
-            <button type="button" key={value} className={!custom && minutes === value ? "active" : ""} onClick={() => { setMinutes(value); setCustom(""); }}>
-              <strong>{value}</strong><span>分钟</span>
-            </button>
-          ))}
-          <label className={custom ? "active" : ""}>
-            <input type="number" min="1" max="720" value={custom} onChange={event => setCustom(event.target.value)} placeholder="自定义" />
-            <span>分钟</span>
-          </label>
+        {mode === "countdown" && (
+          <div className="pomo-section duration-section">
+            <span className="field-label">专注时长</span>
+            <div className="duration-presets">
+              {PRESETS.map(value => (
+                <button type="button" key={value} className={!custom && minutes === value ? "active" : ""} onClick={() => { setMinutes(value); setCustom(""); }}>
+                  <strong>{value}</strong><span>分钟</span>
+                </button>
+              ))}
+              <label className={`custom-duration ${custom ? "active" : ""}`}>
+                <span>自定义</span>
+                <div><input type="number" min="1" max="720" value={custom} onChange={event => setCustom(event.target.value)} placeholder="--" /><em>分钟</em></div>
+              </label>
+            </div>
+          </div>
+        )}
+        <div className="pomo-section task-tag-editor">
+          <div className="tag-editor-heading">
+            <span className="field-label">任务标签 <em>可多选</em></span>
+            <button type="button" className={managingTags ? "active" : ""} onClick={() => setManagingTags(value => !value)}><Settings2 size={14} />{managingTags ? "完成管理" : "管理"}</button>
+          </div>
+          <div className="tag-chips">
+            {data.tags.map(tag => (
+              <span className={`editable-tag ${tags.includes(tag) ? "active" : ""} ${managingTags ? "managing" : ""}`} key={tag}>
+                <button type="button" onClick={() => setTags(current => current.includes(tag) ? current.filter(item => item !== tag) : [...current, tag])}>
+                  {tags.includes(tag) && <Check size={13} />}{tag}
+                </button>
+                {managingTags && <button type="button" className="delete-tag" onClick={() => deleteTag(tag)} aria-label={`删除标签${tag}`}><Trash2 size={11} /></button>}
+              </span>
+            ))}
+            {!addingTag && <button type="button" className="new-tag-chip" onClick={() => setAddingTag(true)}><Plus size={13} />新建</button>}
+          </div>
+          {addingTag && (
+            <div className="inline-new-tag">
+              <input value={newTag} maxLength={16} onChange={event => setNewTag(event.target.value)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); addTag(); } }} placeholder="标签名称" autoFocus />
+              <button type="button" onClick={addTag}>添加</button>
+              <button type="button" onClick={() => { setAddingTag(false); setNewTag(""); }}>取消</button>
+            </div>
+          )}
         </div>
-      </div>
-      <div className="pomo-section tag-picker">
-        <span className="field-label">标签 <em>可多选</em></span>
-        <div className="tag-chips">
-          {data.tags.map(tag => (
-            <button type="button" key={tag} className={tags.includes(tag) ? "active" : ""} onClick={() => setTags(current => current.includes(tag) ? current.filter(item => item !== tag) : [...current, tag])}>
-              {tags.includes(tag) && <Check size={13} />}{tag}
-            </button>
-          ))}
-        </div>
-        <div className="tag-quick-add">
-          <input value={newTag} maxLength={16} onChange={event => setNewTag(event.target.value)} placeholder="新建可复用标签" />
-          <button type="button" onClick={addTag}><Plus size={15} />添加</button>
-        </div>
-      </div>
-      <footer>
-        <span className="form-error">{error}</span>
-        <button className="start-focus" type="submit" disabled={busy}><Focus size={20} />开始专注<ChevronRight size={18} /></button>
-      </footer>
-    </form>
+        <footer>
+          <span className="form-error">{error}</span>
+          <button type="button" className="modal-cancel" onClick={onClose}>取消</button>
+          <button className="save-focus-task" type="submit" disabled={saving}><Check size={17} />{saving ? "保存中" : "保存任务"}</button>
+        </footer>
+      </form>
+    </div>
   );
 }
 
 function FocusDashboard({ data, onStart, onImmersive, onFinish, onAbandon, busy }) {
   const timer = useTicker(data.active);
+  const [selectedId, setSelectedId] = useState(data.tasks[0]?.id || "");
+  const [editingTask, setEditingTask] = useState(null);
+  const [editorOpen, setEditorOpen] = useState(false);
   const todaySessions = data.sessions.filter(item => localDateKey(item.endedAt) === localDateKey());
   const completed = todaySessions.filter(item => item.status === "completed");
   const todaySeconds = completed.reduce((sum, item) => sum + item.durationSeconds, 0);
+  const selectedTask = data.tasks.find(task => task.id === selectedId) || data.tasks[0] || null;
+
+  useEffect(() => {
+    if (!data.tasks.some(task => task.id === selectedId)) setSelectedId(data.tasks[0]?.id || "");
+  }, [data.tasks, selectedId]);
 
   if (data.active) {
     return (
@@ -273,7 +340,7 @@ function FocusDashboard({ data, onStart, onImmersive, onFinish, onAbandon, busy 
           <div className="running-actions">
             <button className="immersive-button" onClick={onImmersive}><Expand size={18} />进入沉浸式全屏</button>
             {data.active.mode === "countup" && <button className="complete-button" onClick={onFinish}><Check size={18} />完成</button>}
-            <button className="abandon-button" onClick={onAbandon}><Flag size={17} />放弃</button>
+            {data.active.mode === "countdown" && <button className="abandon-button" onClick={onAbandon}><Flag size={17} />放弃</button>}
           </div>
         </section>
         <aside className="focus-note">
@@ -286,7 +353,55 @@ function FocusDashboard({ data, onStart, onImmersive, onFinish, onAbandon, busy 
 
   return (
     <div className="pomo-focus-page">
-      <Composer data={data} onStart={onStart} busy={busy} />
+      <section className="pomo-task-library">
+        <header>
+          <div><span>FOCUS TASKS</span><h2>选择专注任务</h2><p>保存常用任务，需要时直接开始。</p></div>
+          <button onClick={() => { setEditingTask(null); setEditorOpen(true); }}><Plus size={18} />新建任务</button>
+        </header>
+        <div className="focus-task-list">
+          {data.tasks.map((task, index) => (
+            <article
+              key={task.id}
+              className={`focus-task-card ${selectedTask?.id === task.id ? "selected" : ""}`}
+              onClick={() => setSelectedId(task.id)}
+              onKeyDown={event => { if (event.key === "Enter" || event.key === " ") setSelectedId(task.id); }}
+              role="button"
+              tabIndex={0}
+            >
+              <span className="task-index">{pad(index + 1)}</span>
+              <div className="task-card-copy">
+                <strong>{task.title}</strong>
+                <div>
+                  <em>{task.mode === "countup" ? "正计时" : `${Math.round(task.plannedSeconds / 60)}分钟`}</em>
+                  {task.tags.map(tag => <span key={tag}>{tag}</span>)}
+                </div>
+              </div>
+              <span className="task-mode-icon">{task.mode === "countup" ? <Clock3 size={19} /> : <Timer size={19} />}</span>
+              <span className="task-card-actions">
+                <button type="button" onClick={event => { event.stopPropagation(); setEditingTask(task); setEditorOpen(true); }} aria-label={`编辑任务${task.title}`}><Pencil size={15} /></button>
+                <button type="button" onClick={async event => { event.stopPropagation(); if (confirm(`删除专注任务“${task.title}”？历史统计不会受影响。`)) await window.pomodoroApi.deleteTask(task.id); }} aria-label={`删除任务${task.title}`}><Trash2 size={15} /></button>
+              </span>
+              {selectedTask?.id === task.id && <i className="selected-mark"><Check size={14} /></i>}
+            </article>
+          ))}
+          {!data.tasks.length && (
+            <div className="empty-task-library">
+              <Focus size={34} />
+              <strong>还没有专注任务</strong>
+              <span>新建一个任务，把每次开始的阻力降到最低。</span>
+              <button onClick={() => { setEditingTask(null); setEditorOpen(true); }}><Plus size={17} />新建第一个任务</button>
+            </div>
+          )}
+        </div>
+        <footer>
+          {selectedTask ? (
+            <>
+              <div><span>即将开始</span><strong>{selectedTask.title}</strong></div>
+              <button className="start-focus" onClick={() => onStart(selectedTask)} disabled={busy}><Focus size={19} />开始专注<ChevronRight size={18} /></button>
+            </>
+          ) : <span>选择或新建一个专注任务</span>}
+        </footer>
+      </section>
       <aside className="pomo-today-panel">
         <header><span>TODAY</span><h2>今日足迹</h2></header>
         <div className="today-focus-number">
@@ -308,6 +423,7 @@ function FocusDashboard({ data, onStart, onImmersive, onFinish, onAbandon, busy 
           {!data.sessions.length && <p>你的第一段专注，会从这里留下痕迹。</p>}
         </div>
       </aside>
+      {editorOpen && <TaskEditor data={data} task={editingTask} onClose={() => { setEditorOpen(false); setEditingTask(null); }} />}
     </div>
   );
 }
@@ -338,28 +454,32 @@ function DonutChart({ items, centerLabel, onSelect, selected }) {
   };
   return (
     <div className="pomo-donut-wrap">
-      <svg viewBox="0 0 100 100" className="pomo-donut-chart">
-        {total > 0 ? items.map((item, index) => {
-          const start = cursor;
-          const portion = item.value / total * 359.6;
-          cursor += portion;
-          return (
-            <path
-              key={item.label}
-              d={arcPath(start, cursor)}
-              fill={PALETTE[index % PALETTE.length]}
-              className={selected && selected !== item.label ? "muted" : ""}
-              onClick={() => onSelect?.(item.label)}
-            />
-          );
-        }) : <circle cx="50" cy="50" r="42" fill="#e9e5dc" />}
-        <circle cx="50" cy="50" r="25" className="donut-hole" />
-      </svg>
-      <div className="donut-center"><strong>{formatMinutes(total)}</strong><span>{centerLabel}</span></div>
+      <div className="pomo-donut-visual">
+        <svg viewBox="0 0 100 100" className="pomo-donut-chart">
+          {total > 0 ? items.map((item, index) => {
+            const start = cursor;
+            const portion = item.value / total * 359.6;
+            cursor += portion;
+            return (
+              <path
+                key={item.label}
+                d={arcPath(start, cursor)}
+                fill={PALETTE[index % PALETTE.length]}
+                className={selected && selected !== item.label ? "muted" : ""}
+                onClick={() => onSelect?.(item.label)}
+              />
+            );
+          }) : <circle cx="50" cy="50" r="42" fill="#e9e5dc" />}
+          <circle cx="50" cy="50" r="25" className="donut-hole" />
+        </svg>
+        <div className="donut-center"><strong>{formatMinutes(total)}</strong><span>{centerLabel}</span></div>
+      </div>
       <div className="pomo-legend">
         {items.slice(0, 6).map((item, index) => (
           <button key={item.label} onClick={() => onSelect?.(item.label)} className={selected === item.label ? "active" : ""}>
-            <i style={{ background: PALETTE[index % PALETTE.length] }} /><span>{item.label}</span><b>{formatMinutes(item.value)}</b>
+            <i style={{ background: PALETTE[index % PALETTE.length] }} />
+            <span><strong>{item.label}</strong><small>{formatMinutes(item.value)}</small></span>
+            <b>{total ? `${(item.value / total * 100).toFixed(1)}%` : "0%"}</b>
           </button>
         ))}
         {!items.length && <p>这个范围内还没有完成记录</p>}
@@ -392,19 +512,20 @@ function TrendChart({ sessions, range }) {
   const coords = points.map((item, index) => ({
     ...item,
     x: points.length === 1 ? 50 : 8 + index * (84 / (points.length - 1)),
-    y: 80 - (item[1] / max) * 62
+    y: 52 - (item[1] / max) * 40
   }));
   const line = coords.map(point => `${point.x},${point.y}`).join(" ");
   return (
     <div className="pomo-trend">
-      <svg viewBox="0 0 100 92" preserveAspectRatio="none">
-        {[18, 38, 58, 80].map(y => <line key={y} x1="5" y1={y} x2="96" y2={y} />)}
+      <svg viewBox="0 0 100 62" preserveAspectRatio="xMidYMid meet">
+        {[12, 25.3, 38.6, 52].map(y => <line key={y} x1="5" y1={y} x2="96" y2={y} />)}
         {line && <polyline points={line} className="trend-area-line" />}
         {coords.map((point, index) => (
           <g key={point[0]}>
-            <rect x={point.x - 2.1} y={point.y} width="4.2" height={80 - point.y} rx="2" className="trend-bar" />
+            <rect x={point.x - 1.8} y={point.y} width="3.6" height={52 - point.y} rx="1.8" className="trend-bar" />
             <circle cx={point.x} cy={point.y} r="1.6" />
-            {(points.length <= 10 || index % 2 === 0) && <text x={point.x} y="90">{point[0].slice(5)}</text>}
+            {point[1] > 0 && <text className="trend-value" x={point.x} y={Math.max(5, point.y - 3)}>{Math.round(point[1])}m</text>}
+            {(points.length <= 10 || index % 2 === 0) && <text x={point.x} y="60">{point[0].slice(5)}</text>}
           </g>
         ))}
       </svg>
@@ -426,6 +547,12 @@ function Reports({ data }) {
   }), [data.sessions, range.start.getTime(), range.end.getTime()]);
   const complete = filtered.filter(item => item.status === "completed");
   const total = complete.reduce((sum, item) => sum + item.durationSeconds, 0);
+  const allCompleted = data.sessions.filter(item => item.status === "completed");
+  const allTotal = allCompleted.reduce((sum, item) => sum + item.durationSeconds, 0);
+  const focusDays = new Set(allCompleted.map(item => localDateKey(item.endedAt))).size;
+  const todaySessions = data.sessions.filter(item => localDateKey(item.endedAt) === today);
+  const todayCompleted = todaySessions.filter(item => item.status === "completed");
+  const todayTotal = todayCompleted.reduce((sum, item) => sum + item.durationSeconds, 0);
   const taskDistribution = aggregateBy(filtered, item => item.title);
   const tagDistribution = aggregateBy(filtered, item => item.tags.length ? item.tags : ["无标签"]);
   const drilled = selectedTag
@@ -453,10 +580,22 @@ function Reports({ data }) {
         <span className="range-label">{range.label}</span>
       </section>
       <section className="report-overview">
-        <StatBlock label="累计专注时长" value={formatMinutes(data.sessions.filter(item => item.status === "completed").reduce((sum, item) => sum + item.durationSeconds, 0))} note={`全部${data.sessions.filter(item => item.status === "completed").length}次完成`} />
-        <StatBlock label="本期专注时长" value={formatMinutes(total)} note={`${complete.length}次完成`} />
-        <StatBlock label="本期完成次数" value={complete.length} note={complete.length ? `平均${formatMinutes(total / complete.length)}` : "等待第一条记录"} />
-        <StatBlock label="本期放弃次数" value={filtered.filter(item => item.status === "abandoned").length} note="中途结束的记录" />
+        <div className="focus-summary-group">
+          <header><span>ALL TIME</span><strong>累计专注</strong></header>
+          <div className="focus-summary-metrics">
+            <StatBlock label="次数" value={allCompleted.length} />
+            <StatBlock label="时长" value={<DurationValue seconds={allTotal} />} />
+            <StatBlock label="日均时长" value={<DurationValue seconds={focusDays ? allTotal / focusDays : 0} />} />
+          </div>
+        </div>
+        <div className="focus-summary-group">
+          <header><span>TODAY</span><strong>今日专注</strong></header>
+          <div className="focus-summary-metrics">
+            <StatBlock label="次数" value={todayCompleted.length} />
+            <StatBlock label="时长" value={<DurationValue seconds={todayTotal} />} />
+            <StatBlock label="放弃次数" value={todaySessions.filter(item => item.status === "abandoned").length} />
+          </div>
+        </div>
       </section>
       <section className="report-card trend-report">
         <header><div><span>FOCUS RHYTHM</span><h2>专注节奏</h2></div><LineChart size={22} /></header>
@@ -482,35 +621,9 @@ function Reports({ data }) {
   );
 }
 
-function TagManager({ data }) {
-  const [name, setName] = useState("");
-  const add = async event => {
-    event.preventDefault();
-    if (!name.trim()) return;
-    await window.pomodoroApi.addTag(name.trim());
-    setName("");
-  };
-  return (
-    <section className="pomo-tag-manager">
-      <header><span>REUSABLE LABELS</span><h2>专注标签库</h2><p>标签会在每次创建专注任务时供你快速选择。</p></header>
-      <form onSubmit={add}><input value={name} maxLength={16} onChange={event => setName(event.target.value)} placeholder="输入新标签名称" /><button><Plus size={17} />新建标签</button></form>
-      <div className="managed-tags">
-        {data.tags.map((tag, index) => {
-          const count = data.sessions.filter(item => item.tags.includes(tag)).length;
-          return (
-            <div key={tag}><i style={{ background: PALETTE[index % PALETTE.length] }} /><strong>{tag}</strong><span>{count}次记录</span><button onClick={() => confirm(`删除标签“${tag}”？历史专注记录不会被删除。`) && window.pomodoroApi.deleteTag(tag)}><Trash2 size={16} /></button></div>
-          );
-        })}
-        {!data.tags.length && <p>还没有标签，先创建一个吧。</p>}
-      </div>
-    </section>
-  );
-}
-
 const pages = [
-  { id: "focus", label: "开始专注", icon: Focus },
-  { id: "reports", label: "专注统计", icon: BarChart3 },
-  { id: "tags", label: "标签管理", icon: Tag }
+  { id: "focus", label: "专注任务", icon: Focus },
+  { id: "reports", label: "专注统计", icon: BarChart3 }
 ];
 
 export default function PomodoroApp() {
@@ -590,14 +703,13 @@ export default function PomodoroApp() {
         <header className="topbar pomodoro-topbar">
           <div className="title-row">
             <button className="icon-button" onClick={() => navigate("/")} aria-label="返回主页"><ArrowLeft size={20} /></button>
-            <div><p>{pages.find(item => item.id === page)?.label}</p><h1>{page === "focus" ? "专注此刻" : page === "reports" ? "看见投入" : "整理标签"}</h1></div>
+            <div><p>{pages.find(item => item.id === page)?.label}</p><h1>{page === "focus" ? "选择任务" : "看见投入"}</h1></div>
           </div>
           {data.active && <button className="top-active-pill" onClick={() => setPage("focus")}><i /><span>{data.active.title}</span><b>{formatClock(timer.display)}</b></button>}
         </header>
-        <div className="pomodoro-content">
+        <div className={`pomodoro-content ${page === "reports" ? "reports-scroll" : ""}`}>
           {page === "focus" && <FocusDashboard data={data} onStart={start} onImmersive={() => { setImmersive(true); window.pomodoroApi.setImmersive(true); }} onFinish={finish} onAbandon={abandon} busy={busy} />}
           {page === "reports" && <Reports data={data} />}
-          {page === "tags" && <TagManager data={data} />}
         </div>
       </section>
     </main>

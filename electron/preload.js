@@ -1,5 +1,23 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
+// ─── 工具箱与桌面组件 API ───
+contextBridge.exposeInMainWorld("appApi", {
+  getSettings: () => ipcRenderer.invoke("app:get-settings"),
+  saveSettings: (patch) => ipcRenderer.invoke("app:save-settings", patch || {}),
+  openMain: (route) => ipcRenderer.invoke("app:open-main", route || "/"),
+  closeWidget: () => ipcRenderer.invoke("widget:close"),
+  onSettingsChanged: (callback) => {
+    const listener = (_, settings) => callback(settings);
+    ipcRenderer.on("app:settings-changed", listener);
+    return () => ipcRenderer.removeListener("app:settings-changed", listener);
+  },
+  onNavigate: (callback) => {
+    const listener = (_, route) => callback(route);
+    ipcRenderer.on("app:navigate", listener);
+    return () => ipcRenderer.removeListener("app:navigate", listener);
+  }
+});
+
 // ─── 饮水提醒 API ───
 contextBridge.exposeInMainWorld("waterApi", {
   getState: () => ipcRenderer.invoke("state:get"),
@@ -45,6 +63,9 @@ contextBridge.exposeInMainWorld("pomodoroApi", {
   getAll: () => ipcRenderer.invoke("pomodoro:getAll"),
   start: (task) => ipcRenderer.invoke("pomodoro:start", task || {}),
   finish: (status) => ipcRenderer.invoke("pomodoro:finish", status),
+  addTask: (task) => ipcRenderer.invoke("pomodoro:task-add", task || {}),
+  updateTask: (id, patch) => ipcRenderer.invoke("pomodoro:task-update", { id, patch }),
+  deleteTask: (id) => ipcRenderer.invoke("pomodoro:task-delete", id),
   addTag: (tag) => ipcRenderer.invoke("pomodoro:addTag", tag),
   deleteTag: (tag) => ipcRenderer.invoke("pomodoro:deleteTag", tag),
   saveSettings: (settings) => ipcRenderer.invoke("pomodoro:saveSettings", settings),

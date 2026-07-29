@@ -13,8 +13,7 @@ const fallbackSettings = {
   ],
   selectedCupId: null, hasChosenCup: false, targetCupsByCupId: {},
   workStart: "09:30", workEnd: "18:30", staleMinutes: 60,
-  repeatUntilLogged: true, snoozeMinutes: 15, showClosePrompt: true,
-  closeAction: "hide", progressMode: "cups"
+  repeatUntilLogged: true, snoozeMinutes: 15, progressMode: "cups"
 };
 
 const fallbackState = {
@@ -408,17 +407,6 @@ function SettingsView({ draftSettings, updateSetting }) {
         <button className={`toggle ${draftSettings.repeatUntilLogged ? "on" : ""}`} onClick={() => updateSetting("repeatUntilLogged", !draftSettings.repeatUntilLogged)}><span />{draftSettings.repeatUntilLogged ? "开启" : "关闭"}</button>
       </div>
       <SettingNumber label="重复间隔" value={draftSettings.snoozeMinutes} min={5} max={120} suffix="分钟" onChange={v => updateSetting("snoozeMinutes", v)} />
-      <div className="setting-row">
-        <label>关闭时询问</label>
-        <button className={`toggle ${draftSettings.showClosePrompt ? "on" : ""}`} onClick={() => updateSetting("showClosePrompt", !draftSettings.showClosePrompt)}><span />{draftSettings.showClosePrompt ? "开启" : "关闭"}</button>
-      </div>
-      <div className="setting-row">
-        <label>不询问时</label>
-        <div className="choice-pair">
-          <button className={draftSettings.closeAction === "hide" ? "picked" : ""} onClick={() => updateSetting("closeAction", "hide")}>隐藏到托盘</button>
-          <button className={draftSettings.closeAction === "quit" ? "picked" : ""} onClick={() => updateSetting("closeAction", "quit")}>退出程序</button>
-        </div>
-      </div>
       {timePickerTarget && <TimeWheelPicker value={activeTimeValue} onChange={v => updateSetting(timePickerTarget, v)} onClose={() => setTimePickerTarget(null)} />}
     </section>
   );
