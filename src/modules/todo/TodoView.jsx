@@ -347,20 +347,61 @@ export default function TodoView({ data, setData }) {
                     </div>
                   )}
                   <div className="todo-expand-subtasks">
-                    <strong>子任务 ({task.subtasks.filter(s => s.completed).length}/{task.subtasks.length})：</strong>
-                    {task.subtasks.length === 0 && <span className="todo-empty-hint">暂无子任务</span>}
-                    {task.subtasks.map(sub => (
-                      <label key={sub.id} className="todo-subtask-row">
-                        <input
-                          type="checkbox"
-                          checked={sub.completed}
-                          onChange={() => {
-                            window.todoApi.toggleSubtask(task.id, sub.id);
-                          }}
-                        />
-                        <span className={sub.completed ? "strikethrough" : ""}>{sub.title}</span>
-                      </label>
-                    ))}
+                    <div className="todo-subtask-head">
+                      <div className="todo-subtask-heading">
+                        <span className="todo-subtask-mark"><ListChecks size={18} /></span>
+                        <div>
+                          <strong>执行步骤</strong>
+                          <span>
+                            {task.subtasks.length === 0
+                              ? "还没有拆分步骤"
+                              : task.subtasks.every(sub => sub.completed)
+                                ? "所有步骤均已完成"
+                                : `还剩${task.subtasks.filter(sub => !sub.completed).length}项待完成`}
+                          </span>
+                        </div>
+                      </div>
+                      {task.subtasks.length > 0 && (
+                        <div className="todo-subtask-progress-copy">
+                          <b>{task.subtasks.filter(sub => sub.completed).length}</b>
+                          <span>/{task.subtasks.length}</span>
+                        </div>
+                      )}
+                    </div>
+                    {task.subtasks.length > 0 && (
+                      <div className="todo-subtask-progress" aria-hidden="true">
+                        <span style={{ width: `${(task.subtasks.filter(sub => sub.completed).length / task.subtasks.length) * 100}%` }} />
+                      </div>
+                    )}
+                    {task.subtasks.length === 0 ? (
+                      <div className="todo-subtask-empty">
+                        <ListChecks size={22} />
+                        <span>编辑任务后可添加最多8个执行步骤</span>
+                      </div>
+                    ) : (
+                      <div className="todo-subtask-grid">
+                        {task.subtasks.map((sub, index) => (
+                          <button
+                            key={sub.id}
+                            type="button"
+                            className={`todo-subtask-row ${sub.completed ? "completed" : ""}`}
+                            onClick={() => window.todoApi.toggleSubtask(task.id, sub.id)}
+                            aria-pressed={sub.completed}
+                          >
+                            <span className="todo-subtask-index">
+                              {sub.completed ? <Check size={15} /> : String(index + 1).padStart(2, "0")}
+                            </span>
+                            <span className="todo-subtask-copy">
+                              <strong>{sub.title}</strong>
+                              <em>{sub.completed ? "已完成" : "待完成"}</em>
+                            </span>
+                            <span className="todo-subtask-check" aria-hidden="true">
+                              {sub.completed && <Check size={13} />}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

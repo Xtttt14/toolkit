@@ -122,6 +122,31 @@ app.whenReady().then(async () => {
   window.setSize(1280, 820);
   results.drinkingTheme = await inspectTheme(window, "drinking", "drinking-warm-1280x820");
   results.todoTheme = await inspectTheme(window, "todo", "todo-warm-1280x820");
+  await window.webContents.executeJavaScript(`document.querySelector(".todo-icon-btn")?.click()`);
+  await new Promise(resolve => setTimeout(resolve, 250));
+  results.todoSubtasks = await inspect(window, "todo-subtasks-1280x820");
+  results.todoSubtasks.components = await window.webContents.executeJavaScript(`(() => ({
+    expanded:Boolean(document.querySelector(".todo-expand")),
+    steps:document.querySelectorAll(".todo-subtask-row").length,
+    completed:document.querySelectorAll(".todo-subtask-row.completed").length,
+    progressWidth:document.querySelector(".todo-subtask-progress span")?.style.width || "",
+    overflow:[document.documentElement.scrollWidth,document.documentElement.clientWidth,document.documentElement.scrollHeight,document.documentElement.clientHeight]
+  }))()`);
+  window.setSize(960, 640);
+  await new Promise(resolve => setTimeout(resolve, 250));
+  results.todoSubtasks960 = await inspect(window, "todo-subtasks-960x640");
+  results.todoSubtasks960.components = await window.webContents.executeJavaScript(`(() => {
+    const rows = [...document.querySelectorAll(".todo-subtask-row")];
+    return {
+      expanded:Boolean(document.querySelector(".todo-expand")),
+      steps:rows.length,
+      columns:rows.length > 1
+        ? new Set(rows.map(row => Math.round(row.getBoundingClientRect().left))).size
+        : rows.length,
+      overflow:[document.documentElement.scrollWidth,document.documentElement.clientWidth,document.documentElement.scrollHeight,document.documentElement.clientHeight]
+    };
+  })()`);
+  window.setSize(1280, 820);
   results.financeTag1280 = await inspectTheme(window, "finance", "finance-square-1280x820");
   window.setSize(960, 640);
   await new Promise(resolve => setTimeout(resolve, 250));

@@ -104,7 +104,12 @@ const todoData = {
       id: "task-1", title: "整理本周计划", description: "确认优先事项", priority: "P1",
       tags: ["工作"], dueDate: new Date(today.getTime() + 86400000).toISOString(),
       reminderMinutes: 30, completed: false, completedAt: null,
-      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), subtasks: []
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      subtasks: [
+        { id: "sub-1", title: "梳理需求与边界", completed: true },
+        { id: "sub-2", title: "完成页面实现", completed: false },
+        { id: "sub-3", title: "执行回归检查", completed: false }
+      ]
     }
   ]
 };
@@ -114,7 +119,12 @@ contextBridge.exposeInMainWorld("todoApi", {
   update: async () => structuredClone(todoData),
   delete: async () => structuredClone(todoData),
   toggleComplete: async () => structuredClone(todoData),
-  toggleSubtask: async () => structuredClone(todoData),
+  toggleSubtask: async (taskId, subtaskId) => {
+    const task = todoData.tasks.find(item => item.id === taskId);
+    const subtask = task?.subtasks.find(item => item.id === subtaskId);
+    if (subtask) subtask.completed = !subtask.completed;
+    return structuredClone(todoData);
+  },
   addTag: async () => structuredClone(todoData),
   deleteTag: async () => structuredClone(todoData),
   onChanged: () => () => {}
