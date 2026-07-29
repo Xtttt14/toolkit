@@ -1,5 +1,6 @@
 const { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, Notification, Tray, nativeImage } = require("electron");
 const path = require("path");
+const fs = require("fs");
 const Store = require("electron-store");
 
 const isDev = !app.isPackaged;
@@ -35,8 +36,19 @@ const defaultTodoData = {
   tags: []
 };
 
+// ─── 记账 默认设置 ───
+const defaultFinanceData = {
+  entries: [],
+  customTags: { income: [], expense: [] }
+};
+const fixedFinanceTags = {
+  income: ["工资", "生活费", "红包", "外快", "股票", "其他"],
+  expense: ["三餐", "零食", "衣服", "交通", "旅行", "孩子", "宠物", "话费网费", "烟酒", "学习", "日用品", "住房", "美妆", "医疗", "发红包", "汽车/加油", "娱乐", "请客送礼", "电器数码", "运动", "其他", "水电煤"]
+};
+
 let waterStore;
 let todoStore;
+let financeStore;
 let mainWindow;
 let tray;
 let reminderTimer;
@@ -60,6 +72,21 @@ function initStores() {
     schema: {
       tasks: { type: "array", default: [] },
       tags: { type: "array", default: [] }
+    }
+  });
+  financeStore = new Store({
+    name: "finance-data",
+    defaults: defaultFinanceData,
+    schema: {
+      entries: { type: "array", default: [] },
+      customTags: {
+        type: "object",
+        default: { income: [], expense: [] },
+        properties: {
+          income: { type: "array", default: [] },
+          expense: { type: "array", default: [] }
+        }
+      }
     }
   });
 }
@@ -396,6 +423,51 @@ function hideWindowToTray() {
   return true;
 }
 
+function normalizeFinanceEntry(entry = {}) {
+  const now = new Date().toISOString();
+  const amount = Math.round(Math.abs(Number(entry.amount) || 0) * 100) / 100;
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(entry.date || "")) ? String(entry.date) : todayKey();
+  return {
+    id: String(entry.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`),
+    type: entry.type === "income" ? "income" : "expense",
+    amount,
+    tag: String(entry.tag || "其他").trim().slice(0, 24) || "其他",
+    note: String(entry.note || "").trim().slice(0, 120),
+    date,
+    createdAt: entry.createdAt || now,
+    updatedAt: entry.updatedAt || now
+  };
+}
+
+function normalizeFinanceTags(tags = {}) {
+  return {
+    income: normalizeStringList(tags.income).map(item => item.slice(0, 12)),
+    expense: normalizeStringList(tags.expense).map(item => item.slice(0, 12))
+  };
+}
+
+function getFinanceData() {
+  const entries = financeStore.get("entries", [])
+    .map(normalizeFinanceEntry)
+    .filter(entry => entry.amount > 0)
+    .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
+  const customTags = normalizeFinanceTags(financeStore.get("customTags", {}));
+  return { version: 1, entries, customTags };
+}
+
+function saveFinanceData(data) {
+  if (data.entries !== undefined) {
+    financeStore.set("entries", data.entries.map(normalizeFinanceEntry).filter(entry => entry.amount > 0));
+  }
+  if (data.customTags !== undefined) financeStore.set("customTags", normalizeFinanceTags(data.customTags));
+}
+
+function broadcastFinance() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("finance:changed", getFinanceData());
+  }
+}
+
 function broadcastState() {
   const waterState = getWaterState();
   const todoData = getTodoData();
@@ -610,6 +682,133 @@ ipcMain.handle("todo:deleteTag", (_, tag) => {
   saveTodoData(data);
   broadcastState();
   return getTodoData();
+});
+
+// ═══════ IPC 记账 ═══════
+ipcMain.handle("finance:getAll", () => getFinanceData());
+ipcMain.handle("finance:add", (_, entry) => {
+  const normalized = normalizeFinanceEntry(entry);
+  if (normalized.amount <= 0) throw new Error("金额必须大于0");
+  const data = getFinanceData();
+  data.entries.push(normalized);
+  saveFinanceData(data);
+  broadcastFinance();
+  return getFinanceData();
+});
+ipcMain.handle("finance:update", (_, { id, patch }) => {
+  const data = getFinanceData();
+  const index = data.entries.findIndex(entry => entry.id === String(id));
+  if (index === -1) return data;
+  const updated = normalizeFinanceEntry({
+    ...data.entries[index],
+    ...patch,
+    id: data.entries[index].id,
+    createdAt: data.entries[index].createdAt,
+    updatedAt: new Date().toISOString()
+  });
+  if (updated.amount <= 0) throw new Error("金额必须大于0");
+  data.entries[index] = updated;
+  saveFinanceData(data);
+  broadcastFinance();
+  return getFinanceData();
+});
+ipcMain.handle("finance:delete", (_, id) => {
+  const data = getFinanceData();
+  data.entries = data.entries.filter(entry => entry.id !== String(id));
+  saveFinanceData(data);
+  broadcastFinance();
+  return getFinanceData();
+});
+ipcMain.handle("finance:tag-add", (_, { type, name }) => {
+  const safeType = type === "income" ? "income" : "expense";
+  const cleanName = String(name || "").trim().slice(0, 12);
+  const data = getFinanceData();
+  const allTags = [...fixedFinanceTags[safeType], ...data.customTags[safeType]];
+  if (cleanName && !allTags.includes(cleanName)) {
+    data.customTags[safeType].push(cleanName);
+    saveFinanceData(data);
+    broadcastFinance();
+  }
+  return getFinanceData();
+});
+ipcMain.handle("finance:tag-rename", (_, { type, oldName, newName }) => {
+  const safeType = type === "income" ? "income" : "expense";
+  const oldTag = String(oldName || "").trim();
+  const nextTag = String(newName || "").trim().slice(0, 12);
+  const data = getFinanceData();
+  const index = data.customTags[safeType].indexOf(oldTag);
+  const allTags = [...fixedFinanceTags[safeType], ...data.customTags[safeType].filter(item => item !== oldTag)];
+  if (index >= 0 && nextTag && !allTags.includes(nextTag)) {
+    data.customTags[safeType][index] = nextTag;
+    data.entries = data.entries.map(entry => (
+      entry.type === safeType && entry.tag === oldTag ? { ...entry, tag: nextTag, updatedAt: new Date().toISOString() } : entry
+    ));
+    saveFinanceData(data);
+    broadcastFinance();
+  }
+  return getFinanceData();
+});
+ipcMain.handle("finance:tag-delete", (_, { type, name }) => {
+  const safeType = type === "income" ? "income" : "expense";
+  const cleanName = String(name || "").trim();
+  const data = getFinanceData();
+  data.customTags[safeType] = data.customTags[safeType].filter(item => item !== cleanName);
+  saveFinanceData(data);
+  broadcastFinance();
+  return getFinanceData();
+});
+ipcMain.handle("finance:export", async () => {
+  const defaultName = `记账备份-${todayKey()}.json`;
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: "导出记账备份",
+    defaultPath: path.join(app.getPath("documents"), defaultName),
+    filters: [{ name: "JSON文件", extensions: ["json"] }]
+  });
+  if (result.canceled || !result.filePath) return { status: "canceled" };
+  const backup = {
+    app: "个人工具箱-记账助手",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    ...getFinanceData()
+  };
+  await fs.promises.writeFile(result.filePath, JSON.stringify(backup, null, 2), "utf8");
+  return { status: "exported", filePath: result.filePath };
+});
+ipcMain.handle("finance:import", async () => {
+  const picked = await dialog.showOpenDialog(mainWindow, {
+    title: "选择记账JSON备份",
+    properties: ["openFile"],
+    filters: [{ name: "JSON文件", extensions: ["json"] }]
+  });
+  if (picked.canceled || !picked.filePaths[0]) return { status: "canceled" };
+  try {
+    const raw = await fs.promises.readFile(picked.filePaths[0], "utf8");
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.entries) || !parsed.customTags || typeof parsed.customTags !== "object") {
+      throw new Error("文件中缺少账目或标签数据");
+    }
+    const confirmation = await dialog.showMessageBox(mainWindow, {
+      type: "warning",
+      title: "恢复记账备份",
+      message: "恢复后将覆盖当前全部记账数据",
+      detail: `备份中包含${parsed.entries.length}笔账目。此操作无法撤销，建议先导出当前数据。`,
+      buttons: ["取消", "确认恢复"],
+      defaultId: 0,
+      cancelId: 0
+    });
+    if (confirmation.response !== 1) return { status: "canceled" };
+    saveFinanceData({ entries: parsed.entries, customTags: parsed.customTags });
+    broadcastFinance();
+    return { status: "imported", count: getFinanceData().entries.length };
+  } catch (error) {
+    await dialog.showMessageBox(mainWindow, {
+      type: "error",
+      title: "无法恢复备份",
+      message: "所选文件不是有效的记账备份",
+      detail: error.message
+    });
+    return { status: "error", message: error.message };
+  }
 });
 
 // ═══════ 启动 ═══════

@@ -37,3 +37,21 @@ contextBridge.exposeInMainWorld("todoApi", {
     return () => ipcRenderer.removeListener("todo:changed", listener);
   }
 });
+
+// ─── 记账助手 API ───
+contextBridge.exposeInMainWorld("financeApi", {
+  getAll: () => ipcRenderer.invoke("finance:getAll"),
+  add: (entry) => ipcRenderer.invoke("finance:add", entry || {}),
+  update: (id, patch) => ipcRenderer.invoke("finance:update", { id, patch }),
+  delete: (id) => ipcRenderer.invoke("finance:delete", id),
+  addTag: (type, name) => ipcRenderer.invoke("finance:tag-add", { type, name }),
+  renameTag: (type, oldName, newName) => ipcRenderer.invoke("finance:tag-rename", { type, oldName, newName }),
+  deleteTag: (type, name) => ipcRenderer.invoke("finance:tag-delete", { type, name }),
+  exportJson: () => ipcRenderer.invoke("finance:export"),
+  importJson: () => ipcRenderer.invoke("finance:import"),
+  onChanged: (callback) => {
+    const listener = (_, data) => callback(data);
+    ipcRenderer.on("finance:changed", listener);
+    return () => ipcRenderer.removeListener("finance:changed", listener);
+  }
+});
