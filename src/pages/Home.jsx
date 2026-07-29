@@ -5,7 +5,7 @@ import { CupSoda, CheckSquare, Timer, Calculator } from "lucide-react";
 const modules = [
   { path: "/drinking", icon: CupSoda, title: "饮水提醒", desc: "定时提醒饮水，记录每日杯数" },
   { path: "/todo", icon: CheckSquare, title: "待办清单", desc: "管理任务，优先级排序，截止提醒" },
-  { path: "/pomodoro", icon: Timer, title: "番茄钟", desc: "专注计时，提高工作效率", disabled: true, hint: "即将推出" },
+  { path: "/pomodoro", icon: Timer, title: "番茄钟", desc: "沉浸专注，回顾每一段投入" },
   { path: "/finance", icon: Calculator, title: "记账助手", desc: "收支管理，日历与统计报表" }
 ];
 

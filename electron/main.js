@@ -41,6 +41,13 @@ const defaultFinanceData = {
   entries: [],
   customTags: { income: [], expense: [] }
 };
+// ─── 番茄钟 默认数据 ───
+const defaultPomodoroData = {
+  sessions: [],
+  tags: ["深度工作", "学习", "阅读"],
+  active: null,
+  settings: { clockStyle: "halo", ambience: "sunset" }
+};
 const fixedFinanceTags = {
   income: ["工资", "生活费", "红包", "外快", "股票", "其他"],
   expense: ["三餐", "零食", "衣服", "交通", "旅行", "孩子", "宠物", "话费网费", "烟酒", "学习", "日用品", "住房", "美妆", "医疗", "发红包", "汽车/加油", "娱乐", "请客送礼", "电器数码", "运动", "其他", "水电煤"]
@@ -49,12 +56,15 @@ const fixedFinanceTags = {
 let waterStore;
 let todoStore;
 let financeStore;
+let pomodoroStore;
 let mainWindow;
 let tray;
 let reminderTimer;
 let todoReminderTimer;
 let waterStartupTimer;
 let todoStartupTimer;
+let pomodoroTimer;
+let pomodoroWindowWasMaximized = false;
 let quitFallbackTimer;
 let snoozedUntil = null;
 let lastReminder = null;
@@ -90,6 +100,16 @@ function initStores() {
           expense: { type: "array", default: [] }
         }
       }
+    }
+  });
+  pomodoroStore = new Store({
+    name: "pomodoro-data",
+    defaults: defaultPomodoroData,
+    schema: {
+      sessions: { type: "array", default: [] },
+      tags: { type: "array", default: [] },
+      active: { type: ["object", "null"], default: null },
+      settings: { type: "object", default: defaultPomodoroData.settings }
     }
   });
 }
@@ -380,10 +400,13 @@ function updateTray() {
   const percent = Math.min(100, Math.round((waterState.today.totalMl / Math.max(1, waterState.today.targetMl)) * 100));
   const { tasks } = getTodoData();
   const todoPending = tasks.filter(t => !t.completed).length;
-  tray.setToolTip(`工具箱 · 饮水 ${waterState.today.cups}/${waterState.settings.targetCups}杯 · 待办${todoPending}`);
+  const focus = pomodoroStore ? getPomodoroData().active : null;
+  const focusLabel = focus ? ` · 专注中「${focus.title}」` : "";
+  tray.setToolTip(`工具箱 · 饮水 ${waterState.today.cups}/${waterState.settings.targetCups}杯 · 待办${todoPending}${focusLabel}`);
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: `今日饮水 ${waterState.today.cups}/${waterState.settings.targetCups}杯 · ${percent}%`, enabled: false },
     { label: `待办 ${todoPending} 项未完成`, enabled: false },
+    ...(focus ? [{ label: `专注中 · ${focus.title}`, enabled: false }] : []),
     { type: "separator" },
     { label: "显示主窗口", click: showWindow },
     { label: `加一杯 (${waterState.selectedCup.ml}ml)`, click: () => addDrink({ source: "tray" }) },
@@ -471,6 +494,113 @@ function broadcastFinance() {
   }
 }
 
+// ═══════ 番茄钟逻辑 ═══════
+function normalizePomodoroSession(session = {}) {
+  const startedAt = session.startedAt && !Number.isNaN(new Date(session.startedAt).getTime())
+    ? session.startedAt : new Date().toISOString();
+  const endedAt = session.endedAt && !Number.isNaN(new Date(session.endedAt).getTime())
+    ? session.endedAt : null;
+  return {
+    id: String(session.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`),
+    title: String(session.title || "未命名专注").trim().slice(0, 60) || "未命名专注",
+    tags: normalizeStringList(session.tags).slice(0, 8).map(tag => tag.slice(0, 16)),
+    mode: session.mode === "countup" ? "countup" : "countdown",
+    plannedSeconds: Math.max(60, Math.min(12 * 60 * 60, Math.round(Number(session.plannedSeconds) || 1800))),
+    status: session.status === "abandoned" ? "abandoned" : "completed",
+    startedAt,
+    endedAt,
+    durationSeconds: Math.max(0, Math.round(Number(session.durationSeconds) || 0))
+  };
+}
+
+function normalizePomodoroActive(active) {
+  if (!active || typeof active !== "object") return null;
+  const startedAt = new Date(active.startedAt);
+  if (Number.isNaN(startedAt.getTime())) return null;
+  const mode = active.mode === "countup" ? "countup" : "countdown";
+  const plannedSeconds = Math.max(60, Math.min(12 * 60 * 60, Math.round(Number(active.plannedSeconds) || 1800)));
+  return {
+    id: String(active.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`),
+    title: String(active.title || "").trim().slice(0, 60),
+    tags: normalizeStringList(active.tags).slice(0, 8).map(tag => tag.slice(0, 16)),
+    mode,
+    plannedSeconds,
+    startedAt: startedAt.toISOString(),
+    finishAt: mode === "countdown"
+      ? new Date(startedAt.getTime() + plannedSeconds * 1000).toISOString()
+      : null
+  };
+}
+
+function getPomodoroData() {
+  const sessions = pomodoroStore.get("sessions", [])
+    .map(normalizePomodoroSession)
+    .filter(session => session.endedAt)
+    .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  const tags = normalizeStringList(pomodoroStore.get("tags", []));
+  const active = normalizePomodoroActive(pomodoroStore.get("active", null));
+  const settings = {
+    ...defaultPomodoroData.settings,
+    ...(pomodoroStore.get("settings", {}) || {})
+  };
+  return { version: 1, sessions, tags, active, settings, now: new Date().toISOString() };
+}
+
+function savePomodoroData(data) {
+  if (data.sessions !== undefined) {
+    pomodoroStore.set("sessions", data.sessions.map(normalizePomodoroSession).filter(session => session.endedAt));
+  }
+  if (data.tags !== undefined) pomodoroStore.set("tags", normalizeStringList(data.tags).map(tag => tag.slice(0, 16)));
+  if (data.active !== undefined) pomodoroStore.set("active", normalizePomodoroActive(data.active));
+  if (data.settings !== undefined) {
+    pomodoroStore.set("settings", { ...defaultPomodoroData.settings, ...data.settings });
+  }
+}
+
+function broadcastPomodoro() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("pomodoro:changed", getPomodoroData());
+  }
+  updateTray();
+}
+
+function finishPomodoro(status = "completed") {
+  const data = getPomodoroData();
+  if (!data.active) return data;
+  const now = new Date();
+  const startedAt = new Date(data.active.startedAt);
+  const elapsed = Math.max(1, Math.round((now - startedAt) / 1000));
+  const durationSeconds = data.active.mode === "countdown" && status === "completed"
+    ? data.active.plannedSeconds
+    : elapsed;
+  const session = normalizePomodoroSession({
+    ...data.active,
+    status,
+    endedAt: now.toISOString(),
+    durationSeconds
+  });
+  data.sessions.unshift(session);
+  data.active = null;
+  savePomodoroData(data);
+  broadcastPomodoro();
+  const notification = new Notification({
+    title: status === "completed" ? "专注完成" : "专注已放弃",
+    body: status === "completed"
+      ? `「${session.title}」完成了 ${Math.max(1, Math.round(durationSeconds / 60))} 分钟专注。`
+      : `「${session.title}」本次记录为放弃。`,
+    silent: status !== "completed"
+  });
+  notification.on("click", showWindow);
+  notification.show();
+  return getPomodoroData();
+}
+
+function maybeFinishPomodoro() {
+  const active = getPomodoroData().active;
+  if (!active || active.mode !== "countdown" || !active.finishAt) return;
+  if (Date.now() >= new Date(active.finishAt).getTime()) finishPomodoro("completed");
+}
+
 function broadcastState() {
   const waterState = getWaterState();
   const todoData = getTodoData();
@@ -542,6 +672,9 @@ function startReminderLoop() {
   todoReminderTimer = setInterval(maybeTodoNotify, 60 * 1000);
   clearTimeout(todoStartupTimer);
   todoStartupTimer = setTimeout(maybeTodoNotify, 5000);
+  clearInterval(pomodoroTimer);
+  pomodoroTimer = setInterval(maybeFinishPomodoro, 1000);
+  maybeFinishPomodoro();
 }
 
 function stopBackgroundWork() {
@@ -549,10 +682,12 @@ function stopBackgroundWork() {
   clearInterval(todoReminderTimer);
   clearTimeout(waterStartupTimer);
   clearTimeout(todoStartupTimer);
+  clearInterval(pomodoroTimer);
   reminderTimer = null;
   todoReminderTimer = null;
   waterStartupTimer = null;
   todoStartupTimer = null;
+  pomodoroTimer = null;
   globalShortcut.unregister("CommandOrControl+Shift+T");
   if (tray && !tray.isDestroyed()) tray.destroy();
   tray = null;
@@ -745,6 +880,68 @@ ipcMain.handle("todo:deleteTag", (_, tag) => {
   saveTodoData(data);
   broadcastState();
   return getTodoData();
+});
+
+// ═══════ IPC 番茄钟 ═══════
+ipcMain.handle("pomodoro:getAll", () => {
+  maybeFinishPomodoro();
+  return getPomodoroData();
+});
+ipcMain.handle("pomodoro:start", (_, payload = {}) => {
+  const data = getPomodoroData();
+  if (data.active) throw new Error("已有正在进行的专注任务");
+  const title = String(payload.title || "").trim().slice(0, 60);
+  if (!title) throw new Error("任务名称不能为空");
+  const plannedSeconds = Math.max(60, Math.min(12 * 60 * 60, Math.round(Number(payload.plannedSeconds) || 1800)));
+  const startedAt = new Date();
+  const active = normalizePomodoroActive({
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    title,
+    tags: payload.tags,
+    mode: payload.mode,
+    plannedSeconds,
+    startedAt: startedAt.toISOString()
+  });
+  data.active = active;
+  data.tags = normalizeStringList([...data.tags, ...(Array.isArray(payload.tags) ? payload.tags : [])]);
+  savePomodoroData(data);
+  broadcastPomodoro();
+  return getPomodoroData();
+});
+ipcMain.handle("pomodoro:finish", (_, status) => finishPomodoro(status === "abandoned" ? "abandoned" : "completed"));
+ipcMain.handle("pomodoro:addTag", (_, tag) => {
+  const data = getPomodoroData();
+  const clean = String(tag || "").trim().slice(0, 16);
+  if (clean && !data.tags.includes(clean)) {
+    data.tags.push(clean);
+    savePomodoroData(data);
+    broadcastPomodoro();
+  }
+  return getPomodoroData();
+});
+ipcMain.handle("pomodoro:deleteTag", (_, tag) => {
+  const data = getPomodoroData();
+  data.tags = data.tags.filter(item => item !== String(tag));
+  savePomodoroData(data);
+  broadcastPomodoro();
+  return getPomodoroData();
+});
+ipcMain.handle("pomodoro:saveSettings", (_, settings) => {
+  const data = getPomodoroData();
+  data.settings = { ...data.settings, ...(settings || {}) };
+  savePomodoroData(data);
+  broadcastPomodoro();
+  return getPomodoroData();
+});
+ipcMain.handle("pomodoro:setImmersive", (_, enabled) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  if (enabled) {
+    pomodoroWindowWasMaximized = mainWindow.isMaximized();
+    if (!pomodoroWindowWasMaximized) mainWindow.maximize();
+  } else if (!pomodoroWindowWasMaximized && mainWindow.isMaximized()) {
+    mainWindow.unmaximize();
+  }
+  return mainWindow.isMaximized();
 });
 
 // ═══════ IPC 记账 ═══════

@@ -40,6 +40,22 @@ contextBridge.exposeInMainWorld("todoApi", {
   }
 });
 
+// ─── 番茄钟 API ───
+contextBridge.exposeInMainWorld("pomodoroApi", {
+  getAll: () => ipcRenderer.invoke("pomodoro:getAll"),
+  start: (task) => ipcRenderer.invoke("pomodoro:start", task || {}),
+  finish: (status) => ipcRenderer.invoke("pomodoro:finish", status),
+  addTag: (tag) => ipcRenderer.invoke("pomodoro:addTag", tag),
+  deleteTag: (tag) => ipcRenderer.invoke("pomodoro:deleteTag", tag),
+  saveSettings: (settings) => ipcRenderer.invoke("pomodoro:saveSettings", settings),
+  setImmersive: (enabled) => ipcRenderer.invoke("pomodoro:setImmersive", Boolean(enabled)),
+  onChanged: (callback) => {
+    const listener = (_, data) => callback(data);
+    ipcRenderer.on("pomodoro:changed", listener);
+    return () => ipcRenderer.removeListener("pomodoro:changed", listener);
+  }
+});
+
 // ─── 记账助手 API ───
 contextBridge.exposeInMainWorld("financeApi", {
   getAll: () => ipcRenderer.invoke("finance:getAll"),

@@ -4,6 +4,7 @@ import Home from "./pages/Home.jsx";
 import DrinkingApp from "./modules/DrinkingApp.jsx";
 import TodoApp from "./modules/TodoApp.jsx";
 import FinanceApp from "./modules/FinanceApp.jsx";
+import PomodoroApp from "./modules/PomodoroApp.jsx";
 
 export default function App() {
   return (
@@ -12,6 +13,7 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/drinking/*" element={<DrinkingApp />} />
         <Route path="/todo/*" element={<TodoApp />} />
+        <Route path="/pomodoro/*" element={<PomodoroApp />} />
         <Route path="/finance/*" element={<FinanceApp />} />
       </Routes>
     </HashRouter>
