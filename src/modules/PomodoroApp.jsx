@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, BarChart3, Check, ChevronRight, Clock3, Expand,
   Flag, Focus, LineChart, Pencil, Plus, RotateCcw, Settings2, Tag, Timer, Trash2, X
@@ -628,6 +628,7 @@ const pages = [
 
 export default function PomodoroApp() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [data, setData] = useState(null);
   const [page, setPage] = useState("focus");
   const [immersive, setImmersive] = useState(false);
@@ -649,6 +650,14 @@ export default function PomodoroApp() {
       window.pomodoroApi.setImmersive(false);
     }
   }, [data?.active, immersive]);
+
+  useEffect(() => {
+    const requested = new URLSearchParams(location.search).has("immersive");
+    if (!requested || !data?.active) return;
+    setImmersive(true);
+    window.pomodoroApi.setImmersive(true);
+    navigate("/pomodoro", { replace: true });
+  }, [location.search, data?.active?.id, navigate]);
 
   const start = async task => {
     setBusy(true);

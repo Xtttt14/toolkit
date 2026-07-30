@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  ArrowUpRight, Calculator, Check, Circle, Clock3, ListTodo,
-  Play, Plus, ReceiptText, Timer, WalletCards, X
+  ArrowUpRight, Calculator, Check, Circle, Clock3, Expand, Flag,
+  ListTodo, Play, Plus, ReceiptText, Timer, WalletCards, X
 } from "lucide-react";
 
 const PRIORITY_LABELS = { P0: "紧急", P1: "高", P2: "中", P3: "低" };
@@ -66,6 +66,8 @@ function PomodoroWidget({ data, now, setData }) {
   const [minutes, setMinutes] = useState("30");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionError, setActionError] = useState("");
   const active = data?.active;
   const elapsed = active ? Math.max(0, Math.floor((now - new Date(active.startedAt).getTime()) / 1000)) : 0;
   const display = active?.mode === "countdown" ? Math.max(0, active.plannedSeconds - elapsed) : elapsed;
@@ -98,6 +100,26 @@ function PomodoroWidget({ data, now, setData }) {
     }
   };
 
+  const finishFocus = async status => {
+    if (actionBusy) return;
+    if (status === "abandoned" && !window.confirm("确定放弃本次专注吗？本次用时会保留在放弃记录中。")) return;
+    setActionBusy(true);
+    setActionError("");
+    try {
+      const next = await window.pomodoroApi.finish(status);
+      if (next) setData(next);
+    } catch (reason) {
+      setActionError(reason?.message || "操作失败，请重试");
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const openImmersive = () => {
+    setActionError("");
+    window.appApi.openMain(`/pomodoro?immersive=${Date.now()}`);
+  };
+
   return (
     <section className={`widget-panel widget-pomodoro ${active ? "active" : "idle"}`}>
       <div className="widget-section-head">
@@ -120,6 +142,16 @@ function PomodoroWidget({ data, now, setData }) {
             <span><Clock3 size={14} />已专注 {formatClock(elapsed)}</span>
             {active.tags?.[0] && <b>{active.tags[0]}</b>}
           </div>
+          <div className="widget-focus-actions">
+            <button className="immersive" onClick={openImmersive}><Expand size={14} />沉浸式全屏</button>
+            {active.mode === "countup" && (
+              <button className="complete" disabled={actionBusy} onClick={() => finishFocus("completed")}><Check size={14} />{actionBusy ? "处理中" : "完成"}</button>
+            )}
+            {active.mode === "countdown" && (
+              <button className="abandon" disabled={actionBusy} onClick={() => finishFocus("abandoned")}><Flag size={13} />{actionBusy ? "处理中" : "放弃"}</button>
+            )}
+          </div>
+          {actionError && <p className="widget-focus-action-error">{actionError}</p>}
         </div>
       ) : (
         <div className="widget-quick-tasks widget-scroll">

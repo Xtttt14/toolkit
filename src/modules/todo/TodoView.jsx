@@ -311,6 +311,14 @@ export default function TodoView({ data, setData }) {
               <div
                 className={`todo-row ${task.completed ? "completed" : ""} ${isOverdue(task.dueDate) && !task.completed ? "overdue" : ""} ${selectionMode ? "selecting" : ""} ${selectedIds.has(task.id) ? "selected" : ""}`}
                 onClick={selectionMode ? () => toggleSelect(task.id) : undefined}
+                role={selectionMode ? "checkbox" : undefined}
+                aria-checked={selectionMode ? selectedIds.has(task.id) : undefined}
+                tabIndex={selectionMode ? 0 : undefined}
+                onKeyDown={selectionMode ? event => {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  event.preventDefault();
+                  toggleSelect(task.id);
+                } : undefined}
                 onDragOver={(event) => {
                   if (!taskDrag?.sourceId || taskDrag.sourceId === task.id) return;
                   event.preventDefault();
@@ -349,9 +357,11 @@ export default function TodoView({ data, setData }) {
                 </span>
                 {selectionMode ? (
                   <span
-                    className="todo-selection-spacer"
-                    aria-label={selectedIds.has(task.id) ? `已选择${task.title}` : `未选择${task.title}`}
-                  />
+                    className={`todo-selection-spacer ${selectedIds.has(task.id) ? "checked" : ""}`}
+                    aria-hidden="true"
+                  >
+                    {selectedIds.has(task.id) && <Check size={16} strokeWidth={2.8} />}
+                  </span>
                 ) : (
                   <button
                     className={`todo-check-circle ${task.completed ? "done" : ""}`}
