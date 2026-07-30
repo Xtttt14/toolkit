@@ -244,7 +244,7 @@ function ProgressView({ state, setState, percent, remainingCups, remainingMl, up
       </div>
       <aside className="info-column">
         <div className="stat-card"><span>距离目标</span><strong>{remainingCups}杯</strong><p title={`还差${remainingMl}ml`}>还差{remainingMl}ml</p></div>
-        <div className="stat-card"><span>提醒状态</span><strong>{state.settings.staleMinutes}分钟</strong><p>久未喝水会提醒，重复间隔{state.settings.snoozeMinutes}分钟</p></div>
+        <div className="stat-card"><span>首次提醒间隔</span><strong>{state.settings.staleMinutes}分钟</strong><p>未记录喝水时，每{state.settings.snoozeMinutes}分钟重复提醒</p></div>
         <div className="history-card">
           <div className="card-title"><Clock size={18} /><strong>今天记录</strong></div>
           {state.today.entries.length === 0 ? (
@@ -401,12 +401,12 @@ function SettingsView({ draftSettings, updateSetting }) {
           <button className="settings-time-button" type="button" onClick={() => setTimePickerTarget("workEnd")}><Clock size={16} />{draftSettings.workEnd}</button>
         </div>
       </div>
-      <SettingNumber label="久未喝水阈值" value={draftSettings.staleMinutes} min={10} max={240} suffix="分钟" onChange={v => updateSetting("staleMinutes", v)} />
+      <SettingNumber label="首次提醒间隔" value={draftSettings.staleMinutes} min={10} max={240} suffix="分钟" onChange={v => updateSetting("staleMinutes", v)} />
       <div className="setting-row">
         <label>重复提醒</label>
         <button className={`toggle ${draftSettings.repeatUntilLogged ? "on" : ""}`} onClick={() => updateSetting("repeatUntilLogged", !draftSettings.repeatUntilLogged)}><span />{draftSettings.repeatUntilLogged ? "开启" : "关闭"}</button>
       </div>
-      <SettingNumber label="重复间隔" value={draftSettings.snoozeMinutes} min={5} max={120} suffix="分钟" onChange={v => updateSetting("snoozeMinutes", v)} />
+      <SettingNumber label="未记录时重复间隔" value={draftSettings.snoozeMinutes} min={5} max={120} suffix="分钟" onChange={v => updateSetting("snoozeMinutes", v)} />
       {timePickerTarget && <TimeWheelPicker value={activeTimeValue} onChange={v => updateSetting(timePickerTarget, v)} onClose={() => setTimePickerTarget(null)} />}
     </section>
   );

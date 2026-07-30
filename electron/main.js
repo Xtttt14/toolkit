@@ -2,8 +2,10 @@ const { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, Notification,
 const path = require("path");
 const fs = require("fs");
 const Store = require("electron-store");
+const { getWaterReminderDueAt, safeMinutes } = require("./water-reminder");
 
 const isDev = !app.isPackaged;
+const waterReminderSessionStartedAt = new Date();
 const userDataPath = process.env.PERSONAL_TOOLBOX_USER_DATA
   || path.join(app.getPath("appData"), "personal-toolbox");
 app.setPath("userData", userDataPath);
@@ -76,7 +78,6 @@ let todoStartupTimer;
 let pomodoroTimer;
 let pomodoroWindowWasMaximized = false;
 let quitFallbackTimer;
-let snoozedUntil = null;
 let lastReminder = null;
 let pendingClose = false;
 let isQuitting = false;
@@ -89,6 +90,10 @@ if (!hasSingleInstanceLock) {
 
 function initStores() {
   waterStore = new Store({ name: "water-data", defaults: { settings: defaultWaterSettings, days: {} } });
+  const savedReminder = waterStore.get("_lastReminder", null);
+  lastReminder = savedReminder?.key && !Number.isNaN(new Date(savedReminder.at).getTime())
+    ? { key: String(savedReminder.key), at: new Date(savedReminder.at).toISOString() }
+    : null;
   const legacyWaterSettings = waterStore.get("settings", {});
   appStore = new Store({
     name: "app-data",
@@ -314,8 +319,7 @@ function addDrink(payload = {}) {
   });
   day.entries.sort((a, b) => new Date(a.at) - new Date(b.at));
   setDay(key, day);
-  snoozedUntil = null;
-  lastReminder = null;
+  clearWaterReminderState();
   broadcastState();
   if (payload.source === "tray" || payload.source === "menu") {
     new Notification({ title: "已记录一杯水", body: `今天已记录 ${getWaterState().today.cups}/${settings.targetCups} 杯。`, silent: true }).show();
@@ -333,8 +337,7 @@ function undoDrink() {
     .find((item) => entryMatchesCup(item.entry, state.selectedCup))?.idx;
   if (index !== undefined) day.entries.splice(index, 1);
   setDay(key, day);
-  snoozedUntil = null;
-  lastReminder = null;
+  clearWaterReminderState();
   broadcastState();
   return getWaterState();
 }
@@ -343,28 +346,27 @@ function inWorkWindow(now, settings) {
   const current = now.getHours() * 60 + now.getMinutes();
   return current >= minutesOfDay(settings.workStart) && current <= minutesOfDay(settings.workEnd);
 }
-function progressIsBehind(now, settings, cups) {
-  const start = minutesOfDay(settings.workStart);
-  const end = minutesOfDay(settings.workEnd);
-  const current = now.getHours() * 60 + now.getMinutes();
-  const elapsed = Math.max(0, Math.min(current, end) - start);
-  const total = Math.max(1, end - start);
-  const expected = Math.floor((elapsed / total) * settings.targetCups);
-  return cups < expected;
+function clearWaterReminderState() {
+  lastReminder = null;
+  waterStore?.delete("_lastReminder");
 }
+
 function maybeWaterNotify() {
   const state = getWaterState();
   const { settings, selectedCup, today } = state;
   const now = new Date();
   if (!inWorkWindow(now, settings)) return;
-  if (snoozedUntil && now < snoozedUntil) return;
   if (today.cups >= settings.targetCups) return;
-  const lastAt = today.lastEntry ? new Date(today.lastEntry.at) : null;
-  const stale = !lastAt || (now - lastAt) / 60000 >= settings.staleMinutes;
-  const behind = stale && progressIsBehind(now, settings, today.cups);
-  if (!stale && !behind) return;
-  const reminderKey = [state.date, selectedCup.id, today.cups, today.lastEntry?.id || "none", stale ? "stale" : "behind"].join("|");
-  if (!settings.repeatUntilLogged && lastReminder?.key === reminderKey) return;
+  const reminderKey = [state.date, selectedCup.id, today.cups, today.lastEntry?.id || "none"].join("|");
+  const dueAt = getWaterReminderDueAt({
+    now,
+    settings,
+    lastEntryAt: today.lastEntry?.at,
+    fallbackActivityAt: waterReminderSessionStartedAt,
+    lastReminder,
+    reminderKey
+  });
+  if (!dueAt || now < dueAt) return;
   const notification = new Notification({
     title: "该喝水了",
     body: `今天已记录 ${today.cups}/${settings.targetCups} 杯，${today.totalMl}/${today.targetMl}ml。`,
@@ -373,11 +375,7 @@ function maybeWaterNotify() {
   notification.on("click", showWindow);
   notification.show();
   lastReminder = { key: reminderKey, at: now.toISOString() };
-  if (settings.repeatUntilLogged) {
-    snoozedUntil = new Date(now.getTime() + settings.snoozeMinutes * 60000);
-  } else {
-    snoozedUntil = null;
-  }
+  waterStore.set("_lastReminder", lastReminder);
 }
 
 // ═══════ 待办清单逻辑 ═══════
@@ -870,7 +868,7 @@ function createWindow() {
 
 function startReminderLoop() {
   clearInterval(reminderTimer);
-  reminderTimer = setInterval(maybeWaterNotify, 60 * 1000);
+  reminderTimer = setInterval(maybeWaterNotify, 15 * 1000);
   clearTimeout(waterStartupTimer);
   waterStartupTimer = setTimeout(maybeWaterNotify, 3000);
   clearInterval(todoReminderTimer);
@@ -936,8 +934,10 @@ ipcMain.handle("settings:save", (_, settings) => {
     ? nextSettings.targetCupsByCupId : {};
   nextSettings.targetCupsByCupId = { ...targetCupsByCupId, [selectedCup.id]: targetCups };
   nextSettings.targetCups = targetCups;
+  nextSettings.staleMinutes = safeMinutes(nextSettings.staleMinutes, defaultWaterSettings.staleMinutes, 10, 240);
+  nextSettings.snoozeMinutes = safeMinutes(nextSettings.snoozeMinutes, defaultWaterSettings.snoozeMinutes, 5, 120);
+  nextSettings.repeatUntilLogged = nextSettings.repeatUntilLogged !== false;
   waterStore.set("settings", nextSettings);
-  snoozedUntil = null; lastReminder = null;
   broadcastState();
   return getWaterState();
 });
