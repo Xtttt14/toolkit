@@ -200,6 +200,14 @@ function ProgressView({ state, setState, percent, remainingCups, remainingMl, up
     const next = await window.waterApi.addDrink({ ml: state.today.lastEntry?.ml || state.selectedCup.ml, source: "repeat" });
     setState(next);
   }
+  async function addSelectedCup() {
+    const next = await window.waterApi.addDrink();
+    setState(next);
+  }
+  async function undoLastDrink() {
+    const next = await window.waterApi.undoDrink();
+    setState(next);
+  }
 
   return (
     <section className="progress-page">
@@ -227,8 +235,8 @@ function ProgressView({ state, setState, percent, remainingCups, remainingMl, up
           <div className="progress-line"><span style={{ width: `${percent}%` }} /></div>
         </div>
         <div className="action-grid">
-          <button className="add-button" onClick={() => setState(window.waterApi.addDrink())}><CupSoda size={22} /><span>加一杯</span><em>{state.selectedCup.ml}ml</em></button>
-          <button className="undo-button" onClick={() => setState(window.waterApi.undoDrink())} disabled={state.today.cups === 0}><Minus size={18} />撤销上一杯</button>
+          <button className="add-button" onClick={addSelectedCup}><CupSoda size={22} /><span>加一杯</span><em>{state.selectedCup.ml}ml</em></button>
+          <button className="undo-button" onClick={undoLastDrink} disabled={state.today.cups === 0}><Minus size={18} />撤销上一杯</button>
           <button className="repeat-button" onClick={repeatLastCapacity}><RotateCcw size={18} />重复上次</button>
         </div>
         <form className="progress-manual" onSubmit={submitManual}>

@@ -8,6 +8,7 @@
     "dev": "vite --host 127.0.0.1 --configLoader runner",
     "electron": "electron .",
     "start": "concurrently -k \"npm run dev\" \"wait-on http://127.0.0.1:5173 && electron .\"",
+    "test:async-state": "node scripts/verify-async-state-updates.cjs",
     "test:water-reminder": "node scripts/verify-water-reminder.cjs",
     "build": "vite build --configLoader runner",
     "dist": "npm run build && electron-builder --win portable dir",
