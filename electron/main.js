@@ -588,6 +588,7 @@ function updateTray() {
     { label: `待办 ${todoPending} 项未完成`, enabled: false },
     ...(focus ? [{ label: `专注中 · ${focus.title}`, enabled: false }] : []),
     { type: "separator" },
+    { label: "加一杯", click: () => addDrink({ source: "tray" }) },
     { label: "显示主窗口", click: showWindow },
     {
       label: appSettings.widgetEnabled ? "隐藏桌面组件" : "显示桌面组件",
