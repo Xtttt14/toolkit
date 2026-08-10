@@ -1250,13 +1250,13 @@ h1 { margin: 0; color: #0f1720; font-size: clamp(32px, 4vw, 48px); line-height: 
   --settings-ink:#1f2927;
   --settings-muted:#75817e;
   --settings-line:rgba(35,45,42,.1);
-  min-height:100vh; padding:clamp(28px,4vw,58px) clamp(32px,6vw,96px) 28px;
+  height:100vh; box-sizing:border-box; padding:clamp(28px,4vw,58px) clamp(32px,6vw,96px) 28px;
   color:var(--settings-ink);
   background:
     radial-gradient(circle at 86% 8%,rgba(103,154,139,.13),transparent 27%),
     radial-gradient(circle at 10% 95%,rgba(219,111,79,.1),transparent 28%),
     linear-gradient(145deg,#f5f4ef,#eeefeb);
-  overflow:auto;
+  overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain;
 }
 .app-settings-hero {
   position:relative; max-width:1180px; margin:0 auto clamp(22px,3vw,38px);
@@ -1284,7 +1284,7 @@ h1 { margin: 0; color: #0f1720; font-size: clamp(32px, 4vw, 48px); line-height: 
 }
 .settings-saved.visible { opacity:1; transform:none; }
 .app-settings-grid {
-  max-width:1180px; margin:0 auto; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:clamp(16px,2vw,24px);
+  width:min(100%,760px); margin:0 auto; display:grid; grid-template-columns:minmax(0,1fr); gap:clamp(16px,2vw,24px);
 }
 .app-settings-card {
   min-width:0; padding:clamp(20px,2.3vw,30px);
@@ -1342,7 +1342,6 @@ h1 { margin: 0; color: #0f1720; font-size: clamp(32px, 4vw, 48px); line-height: 
 .app-settings-footer b { color:#66716e; font-weight:600; }
 @media (max-width:980px) {
   .app-settings-page { padding-left:28px; padding-right:28px; }
-  .app-settings-grid { grid-template-columns:1fr; }
 }
 
 /* ═══════ Desktop widget · persistent focus companion ═══════ */
@@ -2127,21 +2126,22 @@ body.widget-body, body.widget-body #root { width:100vw; height:100vh; margin:0; 
 /* ═══════ Global native Select ═══════ */
 select {
   --select-accent:#1597ff;
-  --select-hover-border:#a9c5d8;
-  --select-focus-ring:rgba(21,151,255,.14);
-  --select-option-bg:#eaf5fd;
-  --select-shadow:rgba(24,38,52,.1);
+  --select-hover-border:#8fc8f4;
+  --select-focus-ring:rgba(21,151,255,.2);
+  --select-option-bg:#2471cf;
+  --select-shadow:rgba(24,38,52,.16);
   -webkit-appearance:none;
   appearance:none;
-  color-scheme:light;
-  cursor:pointer;
-  font-weight:600;
+  color:#132333; background-color:#fff; color-scheme:light;
+  cursor:pointer; font-weight:600;
   transition:border-color 160ms ease,background-color 160ms ease,box-shadow 160ms ease;
 }
 select:not([multiple]) {
-  min-height:38px;
-  padding-inline-end:34px;
-  border-radius:9px;
+  min-height:40px;
+  padding:0 38px 0 13px;
+  border:1px solid #b8c5cf;
+  border-radius:11px;
+  background-color:#fff;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='m4.25 6.25 3.75 3.5 3.75-3.5' stroke='%235f7080' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat:no-repeat;
   background-position:right 11px center;
@@ -2150,39 +2150,24 @@ select:not([multiple]) {
 }
 select:hover:not(:disabled) {
   border-color:var(--select-hover-border);
-  box-shadow:0 5px 14px var(--select-shadow);
+  box-shadow:0 4px 12px var(--select-shadow);
 }
 select:focus {
   outline:none;
   border-color:var(--select-accent);
-  box-shadow:0 0 0 3px var(--select-focus-ring),0 8px 20px var(--select-shadow);
+  box-shadow:0 0 0 3px var(--select-focus-ring),0 5px 14px var(--select-shadow);
 }
 select:open {
   border-color:var(--select-accent);
-  box-shadow:0 0 0 3px var(--select-focus-ring),0 8px 20px var(--select-shadow);
+  box-shadow:0 0 0 3px var(--select-focus-ring),0 5px 14px var(--select-shadow);
 }
 select:active:not(:disabled) {
   border-color:var(--select-accent);
   box-shadow:0 0 0 2px var(--select-focus-ring),inset 0 1px 2px rgba(17,24,32,.08);
 }
 select:disabled { cursor:not-allowed; opacity:.55; }
-select option { color:#1f2c36; background:#fff; font-weight:500; }
-select option:checked { color:var(--select-accent); background:var(--select-option-bg); font-weight:700; }
-
-.finance-shell select {
-  --select-accent:var(--finance-gold);
-  --select-hover-border:rgba(180,138,70,.62);
-  --select-focus-ring:rgba(180,138,70,.11);
-  --select-option-bg:#f4ead8;
-  --select-shadow:rgba(60,48,34,.09);
-}
-.desktop-widget select {
-  --select-accent:#c75b41;
-  --select-hover-border:rgba(199,91,65,.48);
-  --select-focus-ring:rgba(199,91,65,.12);
-  --select-option-bg:#f7e8e3;
-  --select-shadow:rgba(74,48,39,.1);
-}
+select option { min-height:36px; padding:8px 13px; color:#182a3a; background:#fff; font-weight:500; }
+select option:checked { color:#fff; background:var(--select-option-bg); font-weight:700; }
 .desktop-widget select:not([multiple]) {
   min-height:35px;
   padding-inline-end:29px;
