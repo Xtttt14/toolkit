@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, Notification, Tray, nativeImage, screen } = require("electron");
+const { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, Notification, Tray, nativeImage } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const Store = require("electron-store");
@@ -34,10 +34,7 @@ const defaultWaterSettings = {
 // ─── 工具箱默认设置 ───
 const defaultAppSettings = {
   showClosePrompt: true,
-  closeAction: "hide",
-  widgetEnabled: true,
-  widgetMode: "pomodoro",
-  widgetBounds: null
+  closeAction: "hide"
 };
 
 // ─── 待办 默认设置 ───
@@ -70,7 +67,6 @@ let financeStore;
 let pomodoroStore;
 let appStore;
 let mainWindow;
-let widgetWindow;
 let tray;
 let reminderTimer;
 let todoReminderTimer;
@@ -106,10 +102,7 @@ function initStores() {
         default: defaultAppSettings,
         properties: {
           showClosePrompt: { type: "boolean", default: true },
-          closeAction: { type: "string", enum: ["hide", "quit"], default: "hide" },
-          widgetEnabled: { type: "boolean", default: true },
-          widgetMode: { type: "string", enum: ["pomodoro", "todo", "finance"], default: "pomodoro" },
-          widgetBounds: { type: ["object", "null"], default: null }
+          closeAction: { type: "string", enum: ["hide", "quit"], default: "hide" }
         }
       }
     }
@@ -216,22 +209,9 @@ function createAppMenu() {
 }
 
 function normalizeAppSettings(settings = {}) {
-  const bounds = settings.widgetBounds && typeof settings.widgetBounds === "object"
-    ? {
-      x: Number.isFinite(Number(settings.widgetBounds.x)) ? Math.round(Number(settings.widgetBounds.x)) : undefined,
-      y: Number.isFinite(Number(settings.widgetBounds.y)) ? Math.round(Number(settings.widgetBounds.y)) : undefined,
-      width: Math.max(320, Math.min(460, Math.round(Number(settings.widgetBounds.width) || 360))),
-      height: Math.max(340, Math.min(620, Math.round(Number(settings.widgetBounds.height) || 430)))
-    }
-    : null;
   return {
     showClosePrompt: settings.showClosePrompt !== false,
-    closeAction: settings.closeAction === "quit" ? "quit" : "hide",
-    widgetEnabled: settings.widgetEnabled !== false,
-    widgetMode: ["pomodoro", "todo", "finance"].includes(settings.widgetMode)
-      ? settings.widgetMode
-      : "pomodoro",
-    widgetBounds: bounds
+    closeAction: settings.closeAction === "quit" ? "quit" : "hide"
   };
 }
 
@@ -432,9 +412,7 @@ function loadRendererRoute(window, route = "/") {
 }
 
 function sendToAppWindows(channel, payload) {
-  for (const window of [mainWindow, widgetWindow]) {
-    if (window && !window.isDestroyed()) window.webContents.send(channel, payload);
-  }
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
 }
 
 function navigateMainWindow(route = "/") {
@@ -445,90 +423,10 @@ function navigateMainWindow(route = "/") {
   else send();
 }
 
-function getVisibleWidgetBounds(savedBounds) {
-  const fallback = { width: 360, height: 430 };
-  if (!savedBounds || savedBounds.x === undefined || savedBounds.y === undefined) {
-    const area = screen.getPrimaryDisplay().workArea;
-    return {
-      ...fallback,
-      x: area.x + area.width - fallback.width - 28,
-      y: area.y + Math.max(28, Math.round((area.height - fallback.height) / 2))
-    };
-  }
-  const candidate = { ...fallback, ...savedBounds };
-  const visible = screen.getAllDisplays().some(display => {
-    const area = display.workArea;
-    return candidate.x < area.x + area.width - 80
-      && candidate.x + candidate.width > area.x + 80
-      && candidate.y < area.y + area.height - 80
-      && candidate.y + candidate.height > area.y + 80;
-  });
-  return visible ? candidate : getVisibleWidgetBounds(null);
-}
-
-function createWidgetWindow() {
-  const settings = getAppSettings();
-  if (!settings.widgetEnabled || (widgetWindow && !widgetWindow.isDestroyed())) return widgetWindow;
-  const bounds = getVisibleWidgetBounds(settings.widgetBounds);
-  widgetWindow = new BrowserWindow({
-    ...bounds,
-    minWidth: 320,
-    minHeight: 340,
-    maxWidth: 460,
-    maxHeight: 620,
-    frame: false,
-    transparent: true,
-    resizable: true,
-    // Keep the widget visible when Windows shows the desktop. It remains
-    // interactive and can still be moved or resized by the user.
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    hasShadow: true,
-    show: false,
-    title: "工具箱桌面组件",
-    icon: getAssetPath("app.ico"),
-    backgroundColor: "#00000000",
-    webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
-      contextIsolation: true,
-      nodeIntegration: false
-    }
-  });
-  widgetWindow.setMenuBarVisibility(false);
-  widgetWindow.once("ready-to-show", () => widgetWindow?.showInactive());
-  widgetWindow.on("moved", saveWidgetBounds);
-  widgetWindow.on("resized", saveWidgetBounds);
-  widgetWindow.on("closed", () => { widgetWindow = null; updateTray(); });
-  widgetWindow.webContents.on("did-fail-load", (_, errorCode, errorDescription) => {
-    console.error(`桌面组件加载失败 (${errorCode})：${errorDescription}`);
-  });
-  loadRendererRoute(widgetWindow, "/widget");
-  return widgetWindow;
-}
-
-function saveWidgetBounds() {
-  if (!appStore || !widgetWindow || widgetWindow.isDestroyed()) return;
-  const settings = getAppSettings();
-  appStore.set("settings", { ...settings, widgetBounds: widgetWindow.getBounds() });
-}
-
-function closeWidget({ disable = false } = {}) {
-  if (disable && appStore) {
-    const settings = getAppSettings();
-    appStore.set("settings", { ...settings, widgetEnabled: false });
-    broadcastAppSettings();
-  }
-  if (widgetWindow && !widgetWindow.isDestroyed()) widgetWindow.destroy();
-  widgetWindow = null;
-  updateTray();
-}
-
 function applyAppSettings(patch = {}) {
   const current = getAppSettings();
   const next = normalizeAppSettings({ ...current, ...(patch || {}) });
   appStore.set("settings", next);
-  if (next.widgetEnabled) createWidgetWindow();
-  else closeWidget();
   broadcastAppSettings();
   updateTray();
   return getAppSettings();
@@ -594,10 +492,6 @@ function updateTray() {
     { type: "separator" },
     { label: "加一杯", click: () => addDrink({ source: "tray" }) },
     { label: "显示主窗口", click: showWindow },
-    {
-      label: appSettings.widgetEnabled ? "隐藏桌面组件" : "显示桌面组件",
-      click: () => applyAppSettings({ widgetEnabled: !appSettings.widgetEnabled })
-    },
     { label: "设置…", click: () => navigateMainWindow("/settings") },
     { type: "separator" },
     { label: "退出", click: () => quitApp() }
@@ -609,6 +503,14 @@ function showWindow() {
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.show();
   mainWindow.focus();
+}
+
+function toggleMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isMinimized() || !mainWindow.isVisible()) {
+    showWindow();
+    return;
+  }
+  mainWindow.close();
 }
 
 function hideWindowToTray() {
@@ -917,11 +819,9 @@ function stopBackgroundWork() {
   waterStartupTimer = null;
   todoStartupTimer = null;
   pomodoroTimer = null;
-  globalShortcut.unregister("CommandOrControl+Shift+T");
+  globalShortcut.unregister("CommandOrControl+Shift+X");
   if (tray && !tray.isDestroyed()) tray.destroy();
   tray = null;
-  if (widgetWindow && !widgetWindow.isDestroyed()) widgetWindow.destroy();
-  widgetWindow = null;
 }
 
 function quitApp() {
@@ -972,8 +872,7 @@ ipcMain.handle("app:request-close", () => {
 });
 ipcMain.handle("app:runtime-status", () => ({
   trayReady: Boolean(tray && !tray.isDestroyed()),
-  windowVisible: Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()),
-  widgetVisible: Boolean(widgetWindow && !widgetWindow.isDestroyed() && widgetWindow.isVisible())
+  windowVisible: Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible())
 }));
 ipcMain.handle("app:resolve-close-choice", (_, choice) => {
   if (choice.remember) {
@@ -1022,10 +921,6 @@ ipcMain.handle("app:save-settings", (_, patch) => ({
 }));
 ipcMain.handle("app:open-main", (_, route) => {
   navigateMainWindow(typeof route === "string" ? route : "/");
-  return true;
-});
-ipcMain.handle("widget:close", () => {
-  closeWidget({ disable: true });
   return true;
 });
 
@@ -1401,9 +1296,8 @@ app.whenReady().then(() => {
   app.setAppUserModelId("local.personal.toolbox");
   createAppMenu();
   ensureTray();
-  globalShortcut.register("CommandOrControl+Shift+T", showWindow);
+  globalShortcut.register("CommandOrControl+Shift+X", toggleMainWindow);
   createWindow();
-  createWidgetWindow();
   updateTray();
   startReminderLoop();
   configureAutoUpdater();

@@ -1,6 +1,6 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
-// ─── 工具箱与桌面组件 API ───
+// ─── 工具箱 API ───
 contextBridge.exposeInMainWorld("appApi", {
   getSettings: () => ipcRenderer.invoke("app:get-settings"),
   getUpdateStatus: () => ipcRenderer.invoke("app:get-update-status"),
@@ -9,7 +9,6 @@ contextBridge.exposeInMainWorld("appApi", {
   installUpdate: () => ipcRenderer.invoke("app:install-update"),
   saveSettings: (patch) => ipcRenderer.invoke("app:save-settings", patch || {}),
   openMain: (route) => ipcRenderer.invoke("app:open-main", route || "/"),
-  closeWidget: () => ipcRenderer.invoke("widget:close"),
   onSettingsChanged: (callback) => {
     const listener = (_, settings) => callback(settings);
     ipcRenderer.on("app:settings-changed", listener);

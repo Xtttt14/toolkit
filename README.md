@@ -141,7 +141,6 @@ toolkit/
 │  │  └─ PomodoroApp.jsx      番茄钟
 │  ├─ pages/Home.jsx          工具箱主页
 │  ├─ pages/AppSettings.jsx   工具箱基础设置
-│  ├─ pages/DesktopWidget.jsx 独立桌面组件
 │  ├─ App.jsx                 页面路由
 │  └─ styles.css              全局与模块样式
 └─ package.json
@@ -151,9 +150,8 @@ toolkit/
 
 - 默认窗口大小为1280×820，最小窗口大小为960×640。
 - 关闭窗口时可选择隐藏到托盘或彻底退出。
-- 桌面组件是独立窗口，主窗口隐藏后仍保持显示；只有退出程序、在设置中关闭或手动关闭组件时才消失。
 - 选择退出后，程序会停止提醒任务、销毁窗口和托盘并结束Electron进程。
-- 若托盘图标被系统折叠，可使用`Ctrl+Shift+T`恢复窗口。
+- 可使用`Ctrl+Shift+X`切换主窗口：隐藏或最小化时恢复；显示时按当前关闭设置隐藏到托盘或退出。
 
 ## 常见问题
 

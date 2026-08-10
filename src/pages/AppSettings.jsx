@@ -1,15 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  ArrowLeft, Calculator, Check, CircleCheck, Download, Info, LayoutPanelTop, ListTodo, LogOut,
-  RefreshCw, Settings, ShieldCheck, Timer
-} from "lucide-react";
+import { ArrowLeft, Check, CircleCheck, Download, Info, LayoutPanelTop, LogOut, RefreshCw, Settings, ShieldCheck } from "lucide-react";
 
 const fallbackSettings = {
   showClosePrompt: true,
   closeAction: "hide",
-  widgetEnabled: true,
-  widgetMode: "pomodoro",
   version: ""
 };
 
@@ -90,7 +85,7 @@ export default function AppSettings() {
         <div>
           <span>PERSONAL TOOLBOX</span>
           <h1>工具箱设置</h1>
-          <p>管理应用行为与桌面组件。修改会立即生效，并保存在本机。</p>
+          <p>管理应用行为。修改会立即生效，并保存在本机。</p>
         </div>
         <div className={`settings-saved ${saved ? "visible" : ""}`}><Check size={15} />已保存</div>
       </header>
@@ -116,33 +111,7 @@ export default function AppSettings() {
               </button>
             </div>
           </div>
-          <div className="settings-callout"><ShieldCheck size={17} /><span>隐藏主窗口不会停止提醒、专注计时或桌面组件。</span></div>
-        </article>
-
-        <article className="app-settings-card">
-          <header>
-            <span className="settings-card-icon blue"><LayoutPanelTop size={20} /></span>
-            <div><span>DESKTOP WIDGET</span><h2>桌面组件</h2></div>
-          </header>
-          <div className="app-setting-row">
-            <div><strong>显示桌面组件</strong><p>组件独立于主窗口，隐藏到托盘后仍会留在桌面，并由其他窗口自然遮挡。</p></div>
-            <SettingSwitch checked={settings.widgetEnabled} onChange={value => update({ widgetEnabled: value })} label="显示桌面组件" />
-          </div>
-          <div className="app-setting-row vertical">
-            <div><strong>默认显示内容</strong><p>也可以直接在组件顶部随时切换。</p></div>
-            <div className="app-setting-choice widget-mode-choice">
-              <button className={settings.widgetMode === "pomodoro" ? "active" : ""} onClick={() => update({ widgetMode: "pomodoro" })}>
-                <Timer size={17} /><span>番茄钟</span>
-              </button>
-              <button className={settings.widgetMode === "todo" ? "active" : ""} onClick={() => update({ widgetMode: "todo" })}>
-                <ListTodo size={17} /><span>Todo列表</span>
-              </button>
-              <button className={settings.widgetMode === "finance" ? "active" : ""} onClick={() => update({ widgetMode: "finance" })}>
-                <Calculator size={17} /><span>记账</span>
-              </button>
-            </div>
-          </div>
-          <div className="settings-callout blue"><Info size={17} /><span>组件支持拖动和缩放；点击组件关闭按钮后，可在这里重新开启。</span></div>
+          <div className="settings-callout"><ShieldCheck size={17} /><span>隐藏主窗口不会停止提醒或专注计时。</span></div>
         </article>
 
         <article className="app-settings-card app-update-card">
