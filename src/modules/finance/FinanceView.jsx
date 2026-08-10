@@ -6,6 +6,7 @@ import {
   Pencil, Phone, Plane, Plus, Save, Shirt, ShoppingBag, Sparkles, Tag, Trash2,
   TrendingUp, Upload, Users, Utensils, Wallet, Wine, X, Zap
 } from "lucide-react";
+import MenuSelect from "../../components/MenuSelect";
 
 const expenseTags = [
   ["三餐", Utensils], ["零食", Coffee], ["衣服", Shirt], ["交通", Bus], ["旅行", Plane],
@@ -333,7 +334,7 @@ function EntryEditModal({ entry, data, onClose }) {
           <label><span>金额</span><input className="finance-amount-input" autoFocus value={amount} inputMode="decimal" onChange={event => setAmount(event.target.value)} /></label>
           <div className="calendar-edit-row">
             <label><span>日期</span><input type="date" value={date} onChange={event => setDate(event.target.value)} /></label>
-            <label><span>标签</span><select value={tag} onChange={event => setTag(event.target.value)}>{tags.map(item => <option key={item}>{item}</option>)}</select></label>
+            <label><span>标签</span><MenuSelect value={tag} ariaLabel="账目标签" onChange={setTag} options={tags.map(item => ({ value:item, label:item }))} /></label>
           </div>
           <label><span>备注</span><input value={note} maxLength={60} onChange={event => setNote(event.target.value)} placeholder="可选备注" /></label>
           <div className="calendar-edit-actions">

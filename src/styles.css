@@ -255,6 +255,10 @@ h1 { margin: 0; color: #0f1720; font-size: clamp(32px, 4vw, 48px); line-height: 
 .stat-card span { font-size: 15px; }
 .stat-card strong { display: block; margin-top: 8px; font-size: clamp(38px, 3.7vw, 52px); line-height: 1; }
 .stat-card p { margin: 8px 0 0; font-size: 15px; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.target-stat-card strong { display:flex; align-items:baseline; gap:clamp(7px,.8vw,12px); min-width:0; white-space:nowrap; font-size:clamp(29px,2.8vw,42px); letter-spacing:-.045em; }
+.target-stat-card strong em { color:#17222d; font-style:normal; font-weight:760; }
+.target-stat-card strong b { min-width:0; color:#17222d; font-weight:780; }
+.target-stat-card strong small { color:#5d6d79; font-size:.6em; font-weight:700; letter-spacing:0; }
 
 .card-title { display: flex; align-items: center; gap: 10px; }
 .empty-state { height: calc(100% - 34px); display: grid; place-items: center; align-content: center; gap: 12px; color: #8a939c; }
@@ -2178,3 +2182,35 @@ select option:checked { color:#fff; background:var(--select-option-bg); font-wei
 @media (prefers-reduced-motion:reduce) {
   select { transition:none; }
 }
+
+/* ═══════ Menu-style select · matches the application View menu ═══════ */
+.menu-select { position:relative; width:100%; min-width:0; }
+.menu-select-trigger {
+  width:100%; min-width:0; height:38px; padding:0 11px 0 12px; display:flex; align-items:center; justify-content:space-between; gap:8px;
+  color:#24313d; background:transparent; border:1px solid #d6dde1; border-radius:7px; font-size:inherit; font-weight:600; text-align:left;
+}
+.menu-select-trigger > span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.menu-select-trigger svg { flex:0 0 auto; color:#60707c; }
+.menu-select-trigger:hover:not(:disabled), .menu-select-trigger[aria-expanded="true"] { background:rgba(255,255,255,.72); border-color:#b9c3c8; }
+.menu-select-trigger:focus-visible { outline:2px solid rgba(63,83,98,.42); outline-offset:2px; }
+.menu-select-popover {
+  position:absolute; z-index:80; top:calc(100% + 5px); left:0; min-width:100%; max-width:min(360px,calc(100vw - 30px)); padding:7px 0;
+  overflow:auto; background:#fff; border:1px solid rgba(32,42,48,.12); border-radius:18px; box-shadow:0 14px 30px rgba(29,39,45,.24);
+}
+.menu-select-popover::before { content:""; position:absolute; inset:0 0 auto; height:1px; background:rgba(255,255,255,.94); pointer-events:none; }
+.menu-select-popover button { width:100%; min-height:39px; padding:0 18px; display:flex; align-items:center; color:#17232c; background:transparent; font-size:14px; font-weight:500; text-align:left; white-space:nowrap; }
+.menu-select-popover button:hover, .menu-select-popover button:focus-visible { outline:none; background:#f0f3f4; }
+.menu-select-popover button[aria-selected="true"] { font-weight:700; }
+.menu-select-popover button:disabled { opacity:.45; }
+.todo-select { width:auto; min-width:132px; }
+.todo-select .menu-select-trigger { height:36px; background:#f9fbfc; }
+.modal-field > .menu-select, .calendar-edit-row .menu-select, .widget-compact-form .menu-select { width:100%; }
+.modal-field > .menu-select .menu-select-trigger { height:42px; padding-inline:12px; background:#f9fbfc; }
+.calendar-edit-row .menu-select .menu-select-trigger { height:40px; background:#fafaf7; border-color:#dfe2dd; }
+.widget-compact-form .menu-select .menu-select-trigger { height:35px; padding-inline:9px; color:#28332f; background:#f1f0ea; border-color:#e1dfd6; border-radius:8px; font-size:10px; }
+.widget-compact-form .menu-select .menu-select-popover { z-index:120; border-radius:12px; }
+.widget-compact-form .menu-select .menu-select-popover button { min-height:32px; padding-inline:11px; font-size:10px; }
+
+/* Native controls remain neutral if a future page still needs one. */
+select { -webkit-appearance:auto; appearance:auto; padding:0 8px; color:inherit; background-image:none!important; box-shadow:none!important; }
+select option, select option:checked { color:inherit; background:initial; font-weight:inherit; }

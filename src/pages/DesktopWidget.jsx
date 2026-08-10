@@ -3,6 +3,7 @@ import {
   ArrowUpRight, Calculator, Check, Circle, Clock3, Expand, Flag,
   ListTodo, Play, Plus, ReceiptText, Timer, WalletCards, X
 } from "lucide-react";
+import MenuSelect from "../components/MenuSelect";
 
 const PRIORITY_LABELS = { P0: "紧急", P1: "高", P2: "中", P3: "低" };
 const FINANCE_TAGS = {
@@ -173,7 +174,7 @@ function PomodoroWidget({ data, now, setData }) {
         <AddSheet title="新增专注任务" subtitle="保存后可在列表中直接开始" onClose={() => setAdding(false)}>
           <form className="widget-compact-form" onSubmit={addTask}>
             <label className="wide"><span>任务名称</span><input autoFocus value={title} onChange={event => setTitle(event.target.value)} placeholder="准备专注什么？" maxLength={60} /></label>
-            <label><span>计时方式</span><select value={mode} onChange={event => setMode(event.target.value)}><option value="countdown">倒计时</option><option value="countup">正计时</option></select></label>
+            <label><span>计时方式</span><MenuSelect value={mode} ariaLabel="计时方式" onChange={setMode} options={[{ value:"countdown", label:"倒计时" }, { value:"countup", label:"正计时" }]} /></label>
             <label><span>时长</span><input type="number" min="1" max="720" disabled={mode === "countup"} value={minutes} onChange={event => setMinutes(event.target.value)} /><em>分钟</em></label>
             {error && <p className="widget-form-error">{error}</p>}
             <button className="widget-form-submit" type="submit" disabled={busy}>{busy ? "保存中…" : "保存任务"}</button>
@@ -252,7 +253,7 @@ function TodoWidget({ data, setData }) {
         <AddSheet title="新增待办" subtitle="新增后保持固定行高并进入列表" onClose={() => setAdding(false)}>
           <form className="widget-compact-form" onSubmit={addTodo}>
             <label className="wide"><span>待办名称</span><input autoFocus value={title} onChange={event => setTitle(event.target.value)} placeholder="接下来要做什么？" maxLength={80} /></label>
-            <label><span>优先级</span><select value={priority} onChange={event => setPriority(event.target.value)}>{Object.entries(PRIORITY_LABELS).map(([value, label]) => <option key={value} value={value}>{value} · {label}</option>)}</select></label>
+            <label><span>优先级</span><MenuSelect value={priority} ariaLabel="优先级" onChange={setPriority} options={Object.entries(PRIORITY_LABELS).map(([value, label]) => ({ value, label:`${value} · ${label}` }))} /></label>
             <label><span>截止日期</span><input type="date" value={dueDate} onChange={event => setDueDate(event.target.value)} /></label>
             {error && <p className="widget-form-error">{error}</p>}
             <button className="widget-form-submit" type="submit" disabled={busy}>{busy ? "保存中…" : "保存待办"}</button>
@@ -343,7 +344,7 @@ function FinanceWidget({ data, setData }) {
               <button type="button" className={type === "income" ? "active income" : ""} onClick={() => changeType("income")}>收入</button>
             </div>
             <label><span>金额</span><input autoFocus type="number" min="0.01" step="0.01" value={amount} onChange={event => setAmount(event.target.value)} placeholder="0.00" /></label>
-            <label><span>分类</span><select value={tag} onChange={event => setTag(event.target.value)}>{tags.map(item => <option key={item} value={item}>{item}</option>)}</select></label>
+            <label><span>分类</span><MenuSelect value={tag} ariaLabel="账目分类" onChange={setTag} options={tags.map(item => ({ value:item, label:item }))} /></label>
             <label><span>日期</span><input type="date" value={date} onChange={event => setDate(event.target.value)} /></label>
             <label><span>备注</span><input value={note} onChange={event => setNote(event.target.value)} placeholder="可选" maxLength={120} /></label>
             {error && <p className="widget-form-error">{error}</p>}

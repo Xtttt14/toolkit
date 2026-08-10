@@ -3,6 +3,7 @@ import {
   Plus, Search, Trash2, ChevronDown, ChevronUp,
   Check, X, Calendar, Flag, AlertCircle, ListChecks, CheckCheck, GripVertical
 } from "lucide-react";
+import MenuSelect from "../../components/MenuSelect";
 
 const PRIORITIES = ["P0", "P1", "P2", "P3"];
 const PRIORITY_COLORS = { P0: "#e03131", P1: "#f08c00", P2: "#2f9e44", P3: "#868e96" };
@@ -227,14 +228,8 @@ export default function TodoView({ data, setData }) {
           />
         </div>
         <div className="todo-filters">
-          <select className="todo-select" value={filterPriority || ""} onChange={e => setFilterPriority(e.target.value || null)}>
-            <option value="">全部优先级</option>
-            {PRIORITIES.map(p => <option key={p} value={p}>{p} - {PRIORITY_LABELS[p]}</option>)}
-          </select>
-          <select className="todo-select" value={filterTag || ""} onChange={e => setFilterTag(e.target.value || null)}>
-            <option value="">全部标签</option>
-            {tags.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
+          <MenuSelect className="todo-select" value={filterPriority || ""} ariaLabel="优先级筛选" onChange={value => setFilterPriority(value || null)} options={[{ value:"", label:"全部优先级" }, ...PRIORITIES.map(p => ({ value:p, label:`${p} - ${PRIORITY_LABELS[p]}` }))]} />
+          <MenuSelect className="todo-select" value={filterTag || ""} ariaLabel="标签筛选" onChange={value => setFilterTag(value || null)} options={[{ value:"", label:"全部标签" }, ...tags.map(tag => ({ value:tag, label:tag }))]} />
           <label className="todo-check-label">
             <input type="checkbox" checked={showCompleted} onChange={() => setShowCompleted(!showCompleted)} />
             <span>显示已完成</span>
@@ -724,15 +719,7 @@ function EditModal({ task, tags, mode = "edit", onClose, onSave, onDelete, onTog
 
           <label className="modal-field">
             <span>提前提醒</span>
-            <select value={reminderMinutes} onChange={e => setReminderMinutes(Number(e.target.value))}>
-              <option value={0}>不提醒</option>
-              <option value={5}>5 分钟前</option>
-              <option value={15}>15 分钟前</option>
-              <option value={30}>30 分钟前</option>
-              <option value={60}>1 小时前</option>
-              <option value={120}>2 小时前</option>
-              <option value={1440}>1 天前</option>
-            </select>
+            <MenuSelect value={reminderMinutes} ariaLabel="提前提醒" onChange={value => setReminderMinutes(Number(value))} options={[[0,"不提醒"],[5,"5 分钟前"],[15,"15 分钟前"],[30,"30 分钟前"],[60,"1 小时前"],[120,"2 小时前"],[1440,"1 天前"]].map(([value, label]) => ({ value, label }))} />
           </label>
 
           <div className="modal-field">

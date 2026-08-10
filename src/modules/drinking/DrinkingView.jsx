@@ -250,7 +250,7 @@ function ProgressView({ state, setState, percent, remainingMl, updateSetting }) 
         {timePickerOpen && <TimeWheelPicker value={manualTime} onChange={setManualTime} onClose={() => setTimePickerOpen(false)} />}
       </div>
       <aside className="info-column">
-        <div className="stat-card"><span>距离目标</span><strong>还差 {remainingMl} ml</strong></div>
+        <div className="stat-card target-stat-card"><span>距离目标</span><strong><em>还差</em><b>{remainingMl}</b><small>ml</small></strong></div>
         <div className="stat-card"><span>首次提醒间隔</span><strong>{state.settings.staleMinutes}分钟</strong><p>未记录喝水时，每{state.settings.snoozeMinutes}分钟重复提醒</p></div>
         <div className="history-card">
           <div className="card-title"><Clock size={18} /><strong>今天记录</strong></div>
