@@ -496,7 +496,8 @@ function TrendChart({ sessions, range }) {
     cursor.setDate(cursor.getDate() + 1);
   }
   const grouped = new Map(days.map(day => [day, 0]));
-  sessions.filter(item => item.status === "completed").forEach(item => {
+  const completedSessions = sessions.filter(item => item.status === "completed");
+  completedSessions.forEach(item => {
     const key = localDateKey(item.endedAt);
     if (grouped.has(key)) grouped.set(key, grouped.get(key) + item.durationSeconds / 60);
   });
@@ -519,27 +520,36 @@ function TrendChart({ sessions, range }) {
     <div className="pomo-trend">
       <svg viewBox="0 0 100 62" preserveAspectRatio="xMidYMid meet">
         {[12, 25.3, 38.6, 52].map(y => <line key={y} x1="5" y1={y} x2="96" y2={y} />)}
-        {line && <polyline points={line} className="trend-area-line" />}
+        {completedSessions.length > 0 && line && <polyline points={line} className="trend-area-line" />}
         {coords.map((point, index) => (
           <g key={point[0]}>
             <rect x={point.x - 1.8} y={point.y} width="3.6" height={52 - point.y} rx="1.8" className="trend-bar" />
-            <circle cx={point.x} cy={point.y} r="1.6" />
+            {completedSessions.length > 0 && <circle cx={point.x} cy={point.y} r="1.6" />}
             {point[1] > 0 && <text className="trend-value" x={point.x} y={Math.max(5, point.y - 3)}>{Math.round(point[1])}m</text>}
             {(points.length <= 10 || index % 2 === 0) && <text x={point.x} y="60">{point[0].slice(5)}</text>}
           </g>
         ))}
+        {!completedSessions.length && (
+          <g className="trend-empty-state">
+            <text x="50" y="29">暂无统计数据</text>
+            <text x="50" y="35">完成一次专注后，这里会生成趋势</text>
+          </g>
+        )}
       </svg>
       <div className="trend-key"><span><i />柱状：每日专注</span><span><i />曲线：专注趋势</span></div>
     </div>
   );
 }
 
-function Reports({ data }) {
+function Reports({ data, onClearSessions }) {
   const today = localDateKey();
   const [period, setPeriod] = useState("week");
   const [customStart, setCustomStart] = useState(today);
   const [customEnd, setCustomEnd] = useState(today);
   const [selectedTag, setSelectedTag] = useState("");
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [clearError, setClearError] = useState("");
   const range = useMemo(() => rangeFor(period, new Date(), customStart, customEnd), [period, customStart, customEnd]);
   const filtered = useMemo(() => data.sessions.filter(item => {
     const time = new Date(item.endedAt).getTime();
@@ -558,6 +568,37 @@ function Reports({ data }) {
   const drilled = selectedTag
     ? aggregateBy(filtered.filter(item => selectedTag === "无标签" ? !item.tags.length : item.tags.includes(selectedTag)), item => item.title)
     : [];
+
+  useEffect(() => {
+    if (!clearDialogOpen) return undefined;
+    const handleKeyDown = event => {
+      if (event.key !== "Escape" || clearing) return;
+      setClearDialogOpen(false);
+      setClearError("");
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [clearDialogOpen, clearing]);
+
+  const closeClearDialog = () => {
+    if (clearing) return;
+    setClearDialogOpen(false);
+    setClearError("");
+  };
+
+  const clearSessions = async () => {
+    setClearing(true);
+    setClearError("");
+    try {
+      await onClearSessions();
+      setSelectedTag("");
+      setClearDialogOpen(false);
+    } catch (error) {
+      setClearError(error?.message || "清空统计记录失败，请稍后重试。");
+    } finally {
+      setClearing(false);
+    }
+  };
 
   return (
     <div className="pomo-reports">
@@ -578,6 +619,15 @@ function Reports({ data }) {
           </label>
         )}
         <span className="range-label">{range.label}</span>
+        <button
+          type="button"
+          className="clear-statistics-button"
+          onClick={() => setClearDialogOpen(true)}
+          disabled={!data.sessions.length}
+          title={data.sessions.length ? "清空全部历史专注记录" : "暂无可清空的统计记录"}
+        >
+          <Trash2 size={14} />清空统计记录
+        </button>
       </section>
       <section className="report-overview">
         <div className="focus-summary-group">
@@ -617,6 +667,32 @@ function Reports({ data }) {
           onSelect={selectedTag ? undefined : setSelectedTag}
         />
       </section>
+      {clearDialogOpen && (
+        <div className="pomo-task-modal-backdrop pomo-confirm-backdrop" onMouseDown={event => event.target === event.currentTarget && closeClearDialog()}>
+          <section
+            className="pomo-confirm-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="clear-pomodoro-title"
+            aria-describedby="clear-pomodoro-description"
+          >
+            <div className="pomo-confirm-icon"><Trash2 size={21} /></div>
+            <div className="pomo-confirm-copy">
+              <span>CLEAR FOCUS HISTORY</span>
+              <h2 id="clear-pomodoro-title">确定清空所有番茄钟记录吗？</h2>
+              <p id="clear-pomodoro-description">此操作不可恢复。</p>
+              <small>只会删除历史专注记录，任务、标签、设置和当前计时状态将保留。</small>
+            </div>
+            {clearError && <p className="pomo-confirm-error" role="alert">{clearError}</p>}
+            <footer>
+              <button type="button" className="modal-cancel" onClick={closeClearDialog} disabled={clearing} autoFocus>取消</button>
+              <button type="button" className="clear-confirm-button" onClick={clearSessions} disabled={clearing}>
+                <Trash2 size={15} />{clearing ? "清空中…" : "确认清空"}
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
@@ -684,6 +760,10 @@ export default function PomodoroApp() {
     await window.pomodoroApi.finish("abandoned");
     await exitImmersive();
   };
+  const clearSessions = async () => {
+    const next = await window.pomodoroApi.clearSessions();
+    setData(next);
+  };
   const saveSettings = patch => window.pomodoroApi.saveSettings({ ...data.settings, ...patch });
 
   if (!data) return null;
@@ -718,7 +798,7 @@ export default function PomodoroApp() {
         </header>
         <div className={`pomodoro-content ${page === "reports" ? "reports-scroll" : ""}`}>
           {page === "focus" && <FocusDashboard data={data} onStart={start} onImmersive={() => { setImmersive(true); window.pomodoroApi.setImmersive(true); }} onFinish={finish} onAbandon={abandon} busy={busy} />}
-          {page === "reports" && <Reports data={data} />}
+          {page === "reports" && <Reports data={data} onClearSessions={clearSessions} />}
         </div>
       </section>
     </main>

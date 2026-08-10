@@ -1113,6 +1113,11 @@ ipcMain.handle("pomodoro:getAll", () => {
   maybeFinishPomodoro();
   return getPomodoroData();
 });
+ipcMain.handle("pomodoro:clearSessions", () => {
+  pomodoroStore.set("sessions", []);
+  broadcastPomodoro();
+  return getPomodoroData();
+});
 ipcMain.handle("pomodoro:start", (_, payload = {}) => {
   const data = getPomodoroData();
   if (data.active) throw new Error("已有正在进行的专注任务");

@@ -61,6 +61,7 @@ contextBridge.exposeInMainWorld("todoApi", {
 // ─── 番茄钟 API ───
 contextBridge.exposeInMainWorld("pomodoroApi", {
   getAll: () => ipcRenderer.invoke("pomodoro:getAll"),
+  clearSessions: () => ipcRenderer.invoke("pomodoro:clearSessions"),
   start: (task) => ipcRenderer.invoke("pomodoro:start", task || {}),
   finish: (status) => ipcRenderer.invoke("pomodoro:finish", status),
   addTask: (task) => ipcRenderer.invoke("pomodoro:task-add", task || {}),

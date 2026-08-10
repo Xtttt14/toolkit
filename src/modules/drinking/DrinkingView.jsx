@@ -92,7 +92,6 @@ export default function DrinkingView({ state, setState }) {
 
   const s = state || fallbackState;
   const percent = Math.min(100, Math.round((s.today.totalMl / Math.max(1, s.today.targetMl)) * 100));
-  const remainingCups = Math.max(0, s.settings.targetCups - s.today.cups);
   const remainingMl = Math.max(0, s.today.targetMl - s.today.totalMl);
 
   async function saveSettings(nextDraft) {
@@ -146,7 +145,7 @@ export default function DrinkingView({ state, setState }) {
         <button className={view === "settings" ? "active" : ""} onClick={() => setView("settings")}><Settings size={16} /> 设置</button>
       </nav>
       {view === "cups" && <CupList cups={draftSettings.cupProfiles} selectedCupId={s.selectedCup?.id} onChoose={chooseCup} onAdd={addCupProfile} onUpdate={updateCup} onRemove={removeCupProfile} />}
-      {view === "progress" && <ProgressView state={s} setState={setState} percent={percent} remainingCups={remainingCups} remainingMl={remainingMl} updateSetting={updateSetting} />}
+      {view === "progress" && <ProgressView state={s} setState={setState} percent={percent} remainingMl={remainingMl} updateSetting={updateSetting} />}
       {view === "history" && <HistoryView state={s} />}
       {view === "settings" && <SettingsView draftSettings={draftSettings} updateSetting={updateSetting} />}
     </div>
@@ -183,7 +182,7 @@ function CupList({ cups, selectedCupId, onChoose, onAdd, onUpdate, onRemove }) {
   );
 }
 
-function ProgressView({ state, setState, percent, remainingCups, remainingMl, updateSetting }) {
+function ProgressView({ state, setState, percent, remainingMl, updateSetting }) {
   const [manualTime, setManualTime] = useState(() => { const now = new Date(); return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`; });
   const [manualMl, setManualMl] = useState(state.selectedCup?.ml || 200);
   const [timePickerOpen, setTimePickerOpen] = useState(false);
@@ -251,7 +250,7 @@ function ProgressView({ state, setState, percent, remainingCups, remainingMl, up
         {timePickerOpen && <TimeWheelPicker value={manualTime} onChange={setManualTime} onClose={() => setTimePickerOpen(false)} />}
       </div>
       <aside className="info-column">
-        <div className="stat-card"><span>距离目标</span><strong>{remainingCups}杯</strong><p title={`还差${remainingMl}ml`}>还差{remainingMl}ml</p></div>
+        <div className="stat-card"><span>距离目标</span><strong>还差 {remainingMl} ml</strong></div>
         <div className="stat-card"><span>首次提醒间隔</span><strong>{state.settings.staleMinutes}分钟</strong><p>未记录喝水时，每{state.settings.snoozeMinutes}分钟重复提醒</p></div>
         <div className="history-card">
           <div className="card-title"><Clock size={18} /><strong>今天记录</strong></div>
@@ -375,22 +374,46 @@ function HistoryView({ state }) {
         </div>
       </div>
       <div className="stats-panel">
-        <StatBlock title="本周统计" stats={weekStats} targetMl={targetMl} />
-        <StatBlock title="本月统计" stats={monthStats} targetMl={targetMl} wide />
+        <StatBlock title="本周统计" stats={weekStats} targetMl={targetMl} period="week" />
+        <StatBlock title="本月统计" stats={monthStats} targetMl={targetMl} period="month" wide />
       </div>
     </section>
   );
 }
 
-function StatBlock({ title, stats, targetMl, wide = false }) {
+function StatBlock({ title, stats, targetMl, period, wide = false }) {
   const maxMl = Math.max(targetMl, ...stats.days.map(d => d.totalMl), 1);
   const avgMl = Math.round(stats.totalMl / Math.max(1, stats.days.length));
+  const edgeCount = period === "month" ? 4 : 1;
   return (
     <article className={`range-card ${wide ? "wide" : ""}`}>
       <div className="range-head"><span><BarChart3 size={17} />{title}</span><strong>{stats.totalMl}ml</strong></div>
       <div className="range-meta"><span>{stats.cups}杯</span><span>{stats.activeDays}天有记录</span><span>日均{avgMl}ml</span></div>
       <div className="bar-strip">
-        {stats.days.map(day => <span key={day.key} title={`${day.key} ${day.totalMl}ml`} style={{ height: `${Math.max(8, Math.round((day.totalMl / maxMl) * 100))}%` }} />)}
+        {stats.days.map((day, index) => {
+          const dateLabel = period === "week"
+            ? new Intl.DateTimeFormat("zh-CN", { weekday: "short" }).format(new Date(`${day.key}T00:00:00`))
+            : day.key;
+          const tooltipAlignment = index < edgeCount
+            ? "tooltip-start"
+            : index >= stats.days.length - edgeCount ? "tooltip-end" : "";
+          return (
+            <span
+              key={day.key}
+              className={`bar-column ${tooltipAlignment}`}
+              style={{ height: `${Math.max(8, Math.round((day.totalMl / maxMl) * 100))}%` }}
+              tabIndex={0}
+              role="img"
+              aria-label={`${period === "week" ? `日期：${dateLabel}` : dateLabel}，饮水量：${day.totalMl} ml`}
+            >
+              <span className="bar-tooltip" aria-hidden="true">
+                <span>{period === "week" ? `日期：${dateLabel}` : dateLabel}</span>
+                <small>饮水量</small>
+                <strong>{day.totalMl} ml</strong>
+              </span>
+            </span>
+          );
+        })}
       </div>
     </article>
   );
