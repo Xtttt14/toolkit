@@ -20,7 +20,7 @@ jobs:
       - run: npm ci
       - run: npm run dist
       - run: |
-          $assets = Get-ChildItem release -File | Where-Object { $_.Extension -in '.exe', '.blockmap', '.yml' } | ForEach-Object FullName
+          $assets = Get-ChildItem release -File | Where-Object { $_.Extension -in '.exe', '.blockmap' -or $_.Name -eq 'latest.yml' } | ForEach-Object FullName
           gh release create "$env:GITHUB_REF_NAME" @assets --title "个人工具箱 $env:GITHUB_REF_NAME" --generate-notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
