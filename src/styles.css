@@ -1513,8 +1513,16 @@ body.widget-body, body.widget-body #root { width:100vw; height:100vh; margin:0; 
 .widget-todo-summary > div:first-child { display:flex; align-items:baseline; gap:5px; }
 .widget-todo-summary > div:first-child > span,.widget-todo-summary em { color:var(--widget-muted); font-family:inherit; font-size:9px; font-style:normal; letter-spacing:0; }
 .widget-todo-summary > div:first-child > strong { margin:0; color:#d76548; font-family:Georgia,serif; font-size:27px; line-height:1; font-weight:500; }
-.widget-todo-list { grid-auto-rows:44px; }
-.widget-todo-list > button { height:44px; }
+.widget-todo-list { display:flex; flex-direction:column; gap:6px; }
+.widget-todo-list > button { height:44px; flex:0 0 44px; }
+.widget-todo-list > button.completed { color:#929b98; background:#eceeea; }
+.widget-todo-list > button.completed .widget-check { color:#4f9277; }
+.widget-todo-list > button.completed .widget-check svg:first-child { opacity:0; }
+.widget-todo-list > button.completed .widget-check svg:last-child { opacity:1; }
+.widget-todo-list > button.completed .widget-todo-copy b { color:#7f8985; text-decoration:line-through; text-decoration-thickness:1px; }
+.widget-todo-list > button.completed .widget-todo-copy em { color:#a2aaa7; }
+.widget-todo-list > button.completed > i { opacity:.38; }
+.widget-todo-list .widget-all-done { min-height:100%; flex:1 1 auto; }
 .widget-all-done { min-height:100%; height:auto; }
 .widget-footnote { color:#8c9692; font-size:8px; text-align:center; }
 .widget-finance { display:grid; grid-template-rows:auto auto minmax(0,1fr); gap:9px; }

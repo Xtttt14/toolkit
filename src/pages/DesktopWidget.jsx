@@ -192,7 +192,11 @@ function TodoWidget({ data, setData }) {
   const [dueDate, setDueDate] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const pending = useMemo(() => (data?.tasks || []).filter(task => !task.completed), [data]);
+  const tasks = useMemo(() => {
+    const source = data?.tasks || [];
+    return [...source].sort((left, right) => Number(left.completed) - Number(right.completed));
+  }, [data]);
+  const pending = tasks.filter(task => !task.completed);
 
   const toggle = async id => {
     const next = await window.todoApi.toggleComplete(id);
@@ -236,14 +240,14 @@ function TodoWidget({ data, setData }) {
         <AddButton onClick={() => { setError(""); setAdding(true); }} label="待办" />
       </div>
       <div className="widget-todo-list widget-scroll">
-        {pending.map(task => (
-          <button key={task.id} className={`priority-${task.priority}`} onClick={() => toggle(task.id)}>
+        {tasks.map(task => (
+          <button key={task.id} className={`priority-${task.priority} ${task.completed ? "completed" : ""}`} onClick={() => toggle(task.id)}>
             <span className="widget-check"><Circle size={17} /><Check size={12} /></span>
             <span className="widget-todo-copy"><b>{task.title}</b><em>{dueLabel(task.dueDate) || PRIORITY_LABELS[task.priority]}</em></span>
             <i />
           </button>
         ))}
-        {!pending.length && (
+        {!tasks.length && (
           <div className="widget-all-done"><span><Check size={23} /></span><strong>今天都完成了</strong><em>给自己留一点轻松时间</em></div>
         )}
       </div>

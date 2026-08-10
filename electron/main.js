@@ -479,7 +479,9 @@ function createWidgetWindow() {
     frame: false,
     transparent: true,
     resizable: true,
-    alwaysOnTop: false,
+    // Keep the widget visible when Windows shows the desktop. It remains
+    // interactive and can still be moved or resized by the user.
+    alwaysOnTop: true,
     skipTaskbar: true,
     hasShadow: true,
     show: false,
