@@ -1322,7 +1322,10 @@ h1 { margin: 0; color: #0f1720; font-size: clamp(32px, 4vw, 48px); line-height: 
   color:#737d7a; background:transparent; border-radius:9px;
 }
 .app-setting-choice button.active { color:var(--settings-ink); background:#fffefa; box-shadow:0 7px 18px rgba(38,48,44,.09); }
-.app-setting-choice.widget-mode-choice { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .app-setting-choice.widget-mode-choice { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .app-setting-choice.shortcut-choice { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .app-setting-choice.shortcut-choice button { font-family:"Cascadia Code","Consolas",monospace; font-size:12px; }
+  .app-setting-error { margin:10px 0 0; color:#b95442; font-size:11px; }
 .settings-callout {
   min-height:48px; margin-top:18px; padding:9px 12px; display:flex; align-items:center; gap:9px;
   color:#806653; background:#f6eee3; border-radius:11px; font-size:10px; line-height:1.5;

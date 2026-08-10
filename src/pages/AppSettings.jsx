@@ -1,12 +1,20 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Check, CircleCheck, Download, Info, LayoutPanelTop, LogOut, RefreshCw, Settings, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Check, CircleCheck, Download, Info, Keyboard, LayoutPanelTop, LogOut, RefreshCw, Settings, ShieldCheck } from "lucide-react";
 
 const fallbackSettings = {
   showClosePrompt: true,
   closeAction: "hide",
+  mainWindowShortcut: "Control+Shift+X",
   version: ""
 };
+
+const shortcutOptions = [
+  ["Control+Shift+X", "Ctrl + Shift + X"],
+  ["Control+Shift+Z", "Ctrl + Shift + Z"],
+  ["Control+Alt+X", "Ctrl + Alt + X"],
+  ["Control+Alt+Z", "Ctrl + Alt + Z"]
+];
 
 function SettingSwitch({ checked, onChange, label }) {
   return (
@@ -28,6 +36,7 @@ export default function AppSettings() {
   const navigate = useNavigate();
   const [settings, setSettings] = useState(null);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [updateStatus, setUpdateStatus] = useState(null);
 
   useEffect(() => {
@@ -51,11 +60,15 @@ export default function AppSettings() {
   }, []);
 
   const update = async patch => {
-    setSettings(current => ({ ...current, ...patch }));
-    const next = await window.appApi?.saveSettings(patch);
-    if (next) setSettings(current => ({ ...current, ...next }));
-    setSaved(true);
-    window.setTimeout(() => setSaved(false), 1200);
+    setSaveError("");
+    try {
+      const next = await window.appApi?.saveSettings(patch);
+      if (next) setSettings(current => ({ ...current, ...next }));
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 1200);
+    } catch (error) {
+      setSaveError(error?.message || "保存设置失败，请稍后重试。");
+    }
   };
 
   const handleUpdateAction = async () => {
@@ -112,6 +125,25 @@ export default function AppSettings() {
             </div>
           </div>
           <div className="settings-callout"><ShieldCheck size={17} /><span>隐藏主窗口不会停止提醒或专注计时。</span></div>
+        </article>
+
+        <article className="app-settings-card">
+          <header>
+            <span className="settings-card-icon blue"><Keyboard size={20} /></span>
+            <div><span>KEYBOARD SHORTCUT</span><h2>主窗口快捷键</h2></div>
+          </header>
+          <div className="app-setting-row vertical">
+            <div><strong>显示或隐藏主窗口</strong><p>即使工具箱在后台，也可以用此快捷键快速恢复或隐藏窗口。</p></div>
+            <div className="app-setting-choice shortcut-choice" role="group" aria-label="主窗口快捷键">
+              {shortcutOptions.map(([value, label]) => (
+                <button key={value} className={settings.mainWindowShortcut === value ? "active" : ""} onClick={() => update({ mainWindowShortcut: value })}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            {saveError && <p className="app-setting-error" role="alert">{saveError}</p>}
+          </div>
+          <div className="settings-callout blue"><Keyboard size={17} /><span>快捷键若被其他程序占用，设置不会保存；请改选其他组合。</span></div>
         </article>
 
         <article className="app-settings-card app-update-card">

@@ -34,8 +34,10 @@ const defaultWaterSettings = {
 // ─── 工具箱默认设置 ───
 const defaultAppSettings = {
   showClosePrompt: true,
-  closeAction: "hide"
+  closeAction: "hide",
+  mainWindowShortcut: "Control+Shift+X"
 };
+const supportedMainWindowShortcuts = ["Control+Shift+X", "Control+Shift+Z", "Control+Alt+X", "Control+Alt+Z"];
 
 // ─── 待办 默认设置 ───
 const defaultTodoData = {
@@ -80,6 +82,7 @@ let pendingClose = false;
 let isQuitting = false;
 let closeDialogOpen = false;
 let updateState = { status: isDev ? "unsupported" : "idle", version: app.getVersion(), message: "" };
+let registeredMainWindowShortcut = null;
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
@@ -102,7 +105,8 @@ function initStores() {
         default: defaultAppSettings,
         properties: {
           showClosePrompt: { type: "boolean", default: true },
-          closeAction: { type: "string", enum: ["hide", "quit"], default: "hide" }
+          closeAction: { type: "string", enum: ["hide", "quit"], default: "hide" },
+          mainWindowShortcut: { type: "string", enum: supportedMainWindowShortcuts, default: "Control+Shift+X" }
         }
       }
     }
@@ -111,7 +115,8 @@ function initStores() {
     appStore.set("settings", {
       ...defaultAppSettings,
       showClosePrompt: legacyWaterSettings.showClosePrompt ?? defaultAppSettings.showClosePrompt,
-      closeAction: legacyWaterSettings.closeAction === "quit" ? "quit" : "hide"
+      closeAction: legacyWaterSettings.closeAction === "quit" ? "quit" : "hide",
+      mainWindowShortcut: defaultAppSettings.mainWindowShortcut
     });
     appStore.set("_migratedFromWaterSettings", true);
   }
@@ -188,7 +193,7 @@ function createAppMenu() {
     {
       label: "文件",
       submenu: [
-        { label: "显示主窗口", click: showWindow },
+        { label: "显示/隐藏主窗口", accelerator: "Control+Shift+X", click: toggleMainWindow },
         { label: "设置…", accelerator: "CommandOrControl+,", click: () => navigateMainWindow("/settings") },
         { type: "separator" },
         { label: "退出", click: () => quitApp() }
@@ -211,7 +216,10 @@ function createAppMenu() {
 function normalizeAppSettings(settings = {}) {
   return {
     showClosePrompt: settings.showClosePrompt !== false,
-    closeAction: settings.closeAction === "quit" ? "quit" : "hide"
+    closeAction: settings.closeAction === "quit" ? "quit" : "hide",
+    mainWindowShortcut: supportedMainWindowShortcuts.includes(settings.mainWindowShortcut)
+      ? settings.mainWindowShortcut
+      : defaultAppSettings.mainWindowShortcut
   };
 }
 
@@ -510,7 +518,21 @@ function toggleMainWindow() {
     showWindow();
     return;
   }
-  mainWindow.close();
+  hideWindowToTray();
+}
+
+function registerMainWindowShortcut(shortcut) {
+  const previousShortcut = registeredMainWindowShortcut;
+  if (previousShortcut === shortcut && globalShortcut.isRegistered(shortcut)) return true;
+  if (previousShortcut) globalShortcut.unregister(previousShortcut);
+  if (globalShortcut.register(shortcut, toggleMainWindow)) {
+    registeredMainWindowShortcut = shortcut;
+    return true;
+  }
+  if (previousShortcut && globalShortcut.register(previousShortcut, toggleMainWindow)) {
+    registeredMainWindowShortcut = previousShortcut;
+  }
+  return false;
 }
 
 function hideWindowToTray() {
@@ -819,7 +841,8 @@ function stopBackgroundWork() {
   waterStartupTimer = null;
   todoStartupTimer = null;
   pomodoroTimer = null;
-  globalShortcut.unregister("CommandOrControl+Shift+X");
+  if (registeredMainWindowShortcut) globalShortcut.unregister(registeredMainWindowShortcut);
+  registeredMainWindowShortcut = null;
   if (tray && !tray.isDestroyed()) tray.destroy();
   tray = null;
 }
@@ -915,10 +938,13 @@ ipcMain.handle("app:install-update", () => {
   autoUpdater.quitAndInstall(false, true);
   return true;
 });
-ipcMain.handle("app:save-settings", (_, patch) => ({
-  ...applyAppSettings(patch),
-  version: app.getVersion()
-}));
+ipcMain.handle("app:save-settings", (_, patch) => {
+  const nextShortcut = patch?.mainWindowShortcut;
+  if (nextShortcut && nextShortcut !== getAppSettings().mainWindowShortcut && !registerMainWindowShortcut(nextShortcut)) {
+    throw new Error("该快捷键可能已被其他程序占用，请选择另一个快捷键。");
+  }
+  return { ...applyAppSettings(patch), version: app.getVersion() };
+});
 ipcMain.handle("app:open-main", (_, route) => {
   navigateMainWindow(typeof route === "string" ? route : "/");
   return true;
@@ -1296,7 +1322,9 @@ app.whenReady().then(() => {
   app.setAppUserModelId("local.personal.toolbox");
   createAppMenu();
   ensureTray();
-  globalShortcut.register("CommandOrControl+Shift+X", toggleMainWindow);
+  if (!registerMainWindowShortcut(getAppSettings().mainWindowShortcut)) {
+    console.error("无法注册主窗口快捷键，可能已被其他程序占用。");
+  }
   createWindow();
   updateTray();
   startReminderLoop();
