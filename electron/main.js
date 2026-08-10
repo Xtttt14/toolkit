@@ -2,6 +2,7 @@ const { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, Notification,
 const path = require("path");
 const fs = require("fs");
 const Store = require("electron-store");
+const { autoUpdater } = require("electron-updater");
 const { getWaterReminderDueAt, safeMinutes } = require("./water-reminder");
 
 const isDev = !app.isPackaged;
@@ -82,6 +83,7 @@ let lastReminder = null;
 let pendingClose = false;
 let isQuitting = false;
 let closeDialogOpen = false;
+let updateState = { status: isDev ? "unsupported" : "idle", version: app.getVersion(), message: "" };
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
@@ -802,6 +804,27 @@ function broadcastState() {
   updateTray();
 }
 
+function sendUpdateState(patch) {
+  updateState = { ...updateState, ...patch };
+  sendToAppWindows("app:update-status", updateState);
+  return updateState;
+}
+
+function configureAutoUpdater() {
+  if (isDev) return;
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.on("checking-for-update", () => sendUpdateState({ status: "checking", message: "正在检查更新…", error: "" }));
+  autoUpdater.on("update-available", info => sendUpdateState({ status: "available", version: info.version, message: `发现 v${info.version}，可立即下载。`, error: "" }));
+  autoUpdater.on("update-not-available", () => sendUpdateState({ status: "idle", version: app.getVersion(), message: "当前已是最新版本。", error: "" }));
+  autoUpdater.on("download-progress", progress => sendUpdateState({ status: "downloading", percent: Math.round(progress.percent), message: `正在下载更新（${Math.round(progress.percent)}%）…`, error: "" }));
+  autoUpdater.on("update-downloaded", info => sendUpdateState({ status: "ready", version: info.version, percent: 100, message: `v${info.version} 已下载，重启后即可完成更新。`, error: "" }));
+  autoUpdater.on("error", error => {
+    console.error("自动更新失败：", error);
+    sendUpdateState({ status: "error", message: "无法检查或下载更新，请稍后重试。", error: error.message });
+  });
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -963,6 +986,34 @@ ipcMain.handle("app:get-settings", () => ({
   ...getAppSettings(),
   version: app.getVersion()
 }));
+ipcMain.handle("app:get-update-status", () => updateState);
+ipcMain.handle("app:check-for-updates", async () => {
+  if (isDev) return sendUpdateState({ status: "unsupported", message: "开发环境不检查更新。" });
+  try {
+    await autoUpdater.checkForUpdates();
+    return updateState;
+  } catch (error) {
+    console.error("检查更新失败：", error);
+    return sendUpdateState({ status: "error", message: "无法检查更新，请稍后重试。", error: error.message });
+  }
+});
+ipcMain.handle("app:download-update", async () => {
+  if (isDev) return sendUpdateState({ status: "unsupported", message: "开发环境不下载更新。" });
+  try {
+    await autoUpdater.downloadUpdate();
+    return updateState;
+  } catch (error) {
+    console.error("下载更新失败：", error);
+    return sendUpdateState({ status: "error", message: "无法下载更新，请稍后重试。", error: error.message });
+  }
+});
+ipcMain.handle("app:install-update", () => {
+  if (updateState.status !== "ready") return false;
+  isQuitting = true;
+  pendingClose = true;
+  autoUpdater.quitAndInstall(false, true);
+  return true;
+});
 ipcMain.handle("app:save-settings", (_, patch) => ({
   ...applyAppSettings(patch),
   version: app.getVersion()
@@ -1353,6 +1404,12 @@ app.whenReady().then(() => {
   createWidgetWindow();
   updateTray();
   startReminderLoop();
+  configureAutoUpdater();
+  if (!isDev) {
+    setTimeout(() => {
+      autoUpdater.checkForUpdates().catch(error => console.error("启动检查更新失败：", error));
+    }, 8000).unref?.();
+  }
 });
 app.on("window-all-closed", () => {});
 app.on("second-instance", () => showWindow());

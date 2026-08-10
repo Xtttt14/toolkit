@@ -1295,6 +1295,7 @@ h1 { margin: 0; color: #0f1720; font-size: clamp(32px, 4vw, 48px); line-height: 
 .settings-card-icon { width:42px; height:42px; display:grid; place-items:center; border-radius:12px; }
 .settings-card-icon.coral { color:#ce6549; background:#f9e7e0; }
 .settings-card-icon.blue { color:#397e90; background:#e4f0f2; }
+.settings-card-icon.green { color:#3c7e63; background:#e4f1e8; }
 .app-settings-card header div > span { color:#89928f; font-size:9px; letter-spacing:.16em; }
 .app-settings-card h2 { margin:3px 0 0; font-size:22px; }
 .app-setting-row {
@@ -1323,6 +1324,17 @@ h1 { margin: 0; color: #0f1720; font-size: clamp(32px, 4vw, 48px); line-height: 
   color:#806653; background:#f6eee3; border-radius:11px; font-size:10px; line-height:1.5;
 }
 .settings-callout.blue { color:#4e6f75; background:#eaf1f1; }
+.settings-callout.green { color:#4b705d; background:#e9f3ec; }
+.app-update-content { min-height:136px; padding:20px 0 2px; display:flex; flex-direction:column; align-items:flex-start; gap:15px; }
+.app-update-content strong { display:block; font-size:14px; }
+.app-update-content p { max-width:390px; margin:5px 0 0; color:var(--settings-muted); font-size:11px; line-height:1.65; }
+.app-update-button { min-width:128px; height:38px; padding:0 13px; display:inline-flex; align-items:center; justify-content:center; gap:7px; color:#fff; background:#467e6d; border-radius:10px; font-size:11px; box-shadow:0 8px 18px rgba(54,112,87,.15); }
+.app-update-button:hover:not(:disabled) { background:#356c59; }
+.app-update-button:disabled { cursor:not-allowed; opacity:.62; }
+.update-progress { width:min(100%,330px); height:6px; margin-top:10px; overflow:hidden; background:#e4e9e5; border-radius:99px; }
+.update-progress span { display:block; height:100%; background:linear-gradient(90deg,#7eb69a,#467e6d); border-radius:inherit; transition:width 180ms ease; }
+.spin { animation:settings-spin 850ms linear infinite; }
+@keyframes settings-spin { to { transform:rotate(360deg); } }
 .app-settings-footer {
   max-width:1180px; margin:18px auto 0; display:flex; align-items:center; justify-content:space-between; color:#84908c; font-size:10px;
 }

@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  ArrowLeft, Calculator, Check, Info, LayoutPanelTop, ListTodo, LogOut,
-  Settings, ShieldCheck, Timer
+  ArrowLeft, Calculator, Check, CircleCheck, Download, Info, LayoutPanelTop, ListTodo, LogOut,
+  RefreshCw, Settings, ShieldCheck, Timer
 } from "lucide-react";
 
 const fallbackSettings = {
@@ -33,11 +33,22 @@ export default function AppSettings() {
   const navigate = useNavigate();
   const [settings, setSettings] = useState(null);
   const [saved, setSaved] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState(null);
 
   useEffect(() => {
     let active = true;
     window.appApi?.getSettings().then(data => active && setSettings({ ...fallbackSettings, ...data }));
     const off = window.appApi?.onSettingsChanged(data => setSettings(current => ({ ...current, ...data })));
+    return () => {
+      active = false;
+      off?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    window.appApi?.getUpdateStatus().then(status => active && setUpdateStatus(status));
+    const off = window.appApi?.onUpdateStatus(status => setUpdateStatus(status));
     return () => {
       active = false;
       off?.();
@@ -50,6 +61,21 @@ export default function AppSettings() {
     if (next) setSettings(current => ({ ...current, ...next }));
     setSaved(true);
     window.setTimeout(() => setSaved(false), 1200);
+  };
+
+  const handleUpdateAction = async () => {
+    if (!updateStatus || updateStatus.status === "unsupported" || updateStatus.status === "checking" || updateStatus.status === "downloading") return;
+    if (updateStatus.status === "available") {
+      setUpdateStatus(current => ({ ...current, status: "downloading", percent: 0, message: "正在准备下载…" }));
+      await window.appApi?.downloadUpdate();
+      return;
+    }
+    if (updateStatus.status === "ready") {
+      await window.appApi?.installUpdate();
+      return;
+    }
+    setUpdateStatus(current => ({ ...current, status: "checking", message: "正在检查更新…" }));
+    await window.appApi?.checkForUpdates();
   };
 
   if (!settings) return null;
@@ -117,6 +143,30 @@ export default function AppSettings() {
             </div>
           </div>
           <div className="settings-callout blue"><Info size={17} /><span>组件支持拖动和缩放；点击组件关闭按钮后，可在这里重新开启。</span></div>
+        </article>
+
+        <article className="app-settings-card app-update-card">
+          <header>
+            <span className="settings-card-icon green"><Download size={20} /></span>
+            <div><span>SOFTWARE UPDATE</span><h2>软件更新</h2></div>
+          </header>
+          <div className="app-update-content">
+            <div>
+              <strong>{updateStatus?.status === "ready" ? "更新已准备就绪" : "自动更新"}</strong>
+              <p>{updateStatus?.message || "启动后会自动检查 GitHub Releases 中的新版本。"}</p>
+              {updateStatus?.status === "downloading" && <div className="update-progress"><span style={{ width: `${updateStatus.percent || 0}%` }} /></div>}
+            </div>
+            <button
+              className="app-update-button"
+              type="button"
+              onClick={handleUpdateAction}
+              disabled={!updateStatus || ["unsupported", "checking", "downloading"].includes(updateStatus.status)}
+            >
+              {updateStatus?.status === "ready" ? <CircleCheck size={16} /> : updateStatus?.status === "available" ? <Download size={16} /> : <RefreshCw size={16} className={updateStatus?.status === "checking" ? "spin" : ""} />}
+              {updateStatus?.status === "ready" ? "重启并更新" : updateStatus?.status === "available" ? "下载更新" : updateStatus?.status === "downloading" ? `下载中 ${updateStatus.percent || 0}%` : updateStatus?.status === "unsupported" ? "安装版可用" : "检查更新"}
+            </button>
+          </div>
+          <div className="settings-callout green"><ShieldCheck size={17} /><span>更新仅适用于安装版；业务数据仍保存在本机，不会被覆盖。</span></div>
         </article>
       </section>
 

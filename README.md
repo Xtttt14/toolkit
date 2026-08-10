@@ -87,13 +87,22 @@ npm run start
 npm run build
 ```
 
-生成Windows便携版：
+生成Windows安装版：
 
 ```powershell
-npm run dist:portable
+npm run dist
 ```
 
-构建结果位于`release-<版本号>/`目录。
+安装版会在启动后自动检查 GitHub Releases 中的新版本。发现更新后，可以在“工具箱设置 → 软件更新”中下载，并重启完成更新；本地业务数据不会被覆盖。
+
+发布新版本时，更新`package.json`中的版本号并推送标签，GitHub Actions 会自动构建安装包、生成更新元数据并创建 GitHub Release：
+
+```powershell
+git tag v1.6.0
+git push origin v1.6.0
+```
+
+构建结果位于`release/`目录。若需要单文件便携版，可继续运行`npm run dist:portable`；便携版不支持自动更新。
 
 ## 数据存储
 

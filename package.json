@@ -1,6 +1,6 @@
 {
   "name": "personal-toolbox",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "private": true,
   "description": "个人本地工具箱 - 饮水提醒 · 待办清单 · 番茄钟 · 记账助手",
   "main": "electron/main.js",
@@ -11,12 +11,14 @@
     "test:async-state": "node scripts/verify-async-state-updates.cjs",
     "test:water-reminder": "node scripts/verify-water-reminder.cjs",
     "build": "vite build --configLoader runner",
-    "dist": "npm run build && electron-builder --win portable dir",
-    "dist:portable": "npm run build && node scripts/build-portable.cjs"
+    "dist": "npm run build && electron-builder --win nsis",
+    "dist:portable": "npm run build && node scripts/build-portable.cjs",
+    "release": "npm run build && electron-builder --win nsis --publish always"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.3.4",
     "electron-store": "^8.2.0",
+    "electron-updater": "^6.8.9",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -55,10 +57,22 @@
     "win": {
       "icon": "electron/assets/app.ico",
       "target": [
-        "portable",
-        "dir"
+        "nsis"
       ]
     },
+    "nsis": {
+      "artifactName": "个人工具箱-Setup-${version}-${arch}.${ext}",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Xtttt14",
+        "repo": "toolkit"
+      }
+    ],
     "portable": {
       "artifactName": "个人工具箱-${version}-${arch}.${ext}"
     }
