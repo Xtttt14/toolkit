@@ -130,21 +130,8 @@ function EntryList({ entries, onEdit, onDelete, pageSize = 4 }) {
 }
 
 function TagManager({ data, type, onClose }) {
-  const [name, setName] = useState("");
-  const [editing, setEditing] = useState(null);
-  const [managing, setManaging] = useState(false);
   const [dragging, setDragging] = useState(null);
   const tags = tagsFor(data, type).map(([item]) => item);
-
-  const submit = async event => {
-    event.preventDefault();
-    const clean = name.trim();
-    if (!clean) return;
-    if (editing) await window.financeApi.renameTag(type, editing, clean);
-    else await window.financeApi.addTag(type, clean);
-    setName("");
-    setEditing(null);
-  };
 
   const moveTag = async target => {
     if (!dragging || dragging === target) return;
@@ -164,33 +151,19 @@ function TagManager({ data, type, onClose }) {
           <div><span>分类设置</span><h2>{type === "income" ? "收入" : "支出"}标签</h2></div>
           <button onClick={onClose} aria-label="关闭"><X size={20} /></button>
         </header>
-        <form onSubmit={submit} className="tag-form">
-          <input
-            autoFocus
-            value={name}
-            maxLength={12}
-            onChange={event => setName(event.target.value)}
-            placeholder="输入标签名称"
-          />
-          <button type="submit">{editing ? "保存修改" : "新增标签"}</button>
-        </form>
-        <button type="button" className={`tag-manage-switch ${managing ? "active" : ""}`} onClick={() => setManaging(value => !value)}>
-          <Settings2 size={16} />{managing ? "完成管理" : "管理标签"}
-        </button>
         <div className="custom-tag-list">
           {tags.length ? tags.map(item => (
             <div
               key={item}
               className={dragging === item ? "dragging" : ""}
-              draggable={managing}
+              draggable
               onDragStart={() => setDragging(item)}
-              onDragOver={event => { if (managing) event.preventDefault(); }}
+              onDragOver={event => event.preventDefault()}
               onDrop={() => moveTag(item)}
               onDragEnd={() => setDragging(null)}
             >
-              <span>{managing && <GripVertical className="tag-drag-handle" size={17} />}<Tag size={16} />{item}</span>
-              <div className={managing ? "visible" : ""}>
-                {(data.customTags[type] || []).includes(item) && <button onClick={() => { setEditing(item); setName(item); }} aria-label={`修改${item}`}><Pencil size={15} /></button>}
+              <span><GripVertical className="tag-drag-handle" size={17} /><Tag size={16} />{item}</span>
+              <div className="visible">
                 <button onClick={() => window.financeApi.deleteTag(type, item)} aria-label={`删除${item}`}><Trash2 size={15} /></button>
               </div>
             </div>
@@ -199,6 +172,30 @@ function TagManager({ data, type, onClose }) {
       </section>
     </div>
   );
+}
+
+function CustomTagModal({ type, onClose }) {
+  const [name, setName] = useState("");
+  const [message, setMessage] = useState("");
+  const submit = async event => {
+    event.preventDefault();
+    const clean = name.trim();
+    if (!clean) return;
+    await window.financeApi.addTag(type, clean);
+    setName("");
+    setMessage("标签已添加");
+  };
+  return <div className="finance-modal-backdrop" onMouseDown={onClose}>
+    <section className="finance-modal custom-tag-modal" onMouseDown={event => event.stopPropagation()}>
+      <header><div><span>自定义标签</span><h2>添加{type === "income" ? "收入" : "支出"}标签</h2></div><button onClick={onClose} aria-label="关闭"><X size={20} /></button></header>
+      <form onSubmit={submit} className="tag-form">
+        <input autoFocus value={name} maxLength={12} onChange={event => setName(event.target.value)} placeholder="输入标签名称" />
+        <button type="submit">新增标签</button>
+      </form>
+      <span className="custom-tag-note">新标签会自动出现在当前标签列表末尾。</span>
+      <span className="save-message">{message}</span>
+    </section>
+  </div>;
 }
 
 function BatchEntryModal({ data, onClose }) {
@@ -245,6 +242,7 @@ function TodayPage({ data }) {
   const [date, setDate] = useState(today);
   const [editingId, setEditingId] = useState(null);
   const [manageTags, setManageTags] = useState(null);
+  const [customTags, setCustomTags] = useState(null);
   const [batchAdding, setBatchAdding] = useState(false);
   const [message, setMessage] = useState("");
   const [tagPage, setTagPage] = useState(0);
@@ -310,7 +308,6 @@ function TodayPage({ data }) {
       <section className="finance-card entry-composer">
         <div className="composer-heading">
           <div><span>快速记录</span><h2>{editingId ? "编辑账目" : "记一笔"}</h2></div>
-          {!editingId && <button type="button" className="batch-add-trigger" onClick={() => setBatchAdding(true)}><Plus size={16} />批量添加</button>}
           <div className="type-switch">
             <button className={type === "expense" ? "active expense" : ""} onClick={() => chooseType("expense")}>支出</button>
             <button className={type === "income" ? "active income" : ""} onClick={() => chooseType("income")}>收入</button>
@@ -322,21 +319,21 @@ function TodayPage({ data }) {
             <div><b>¥</b><input value={amount} onChange={event => setAmount(event.target.value)} inputMode="decimal" placeholder="0.00" /></div>
           </label>
           <div className="tag-field">
-            <span>选择标签</span>
+            <div className="tag-field-label"><span>选择标签</span><button type="button" onClick={() => setManageTags(type)}><Settings2 size={15} />管理</button></div>
             <div className="tag-grid">
               {visibleTags.map(([name, Icon]) => (
                 <button type="button" key={name} className={tag === name ? "selected" : ""} onClick={() => setTag(name)}>
                   <Icon size={18} /><span>{name}</span>
                 </button>
               ))}
-              <button type="button" className="manage-tag" onClick={() => setManageTags(type)}>
+              <button type="button" className="manage-tag" onClick={() => setCustomTags(type)}>
                 <Plus size={18} /><span>自定义</span>
               </button>
             </div>
             <Pager page={tagPage} pages={tagPages} onChange={setTagPage} />
           </div>
           <div className="entry-meta">
-            <label><span>日期</span><input type="date" value={date} onChange={event => setDate(event.target.value)} /></label>
+            <div className="entry-date-actions"><label><span>日期</span><input type="date" value={date} onChange={event => setDate(event.target.value)} /></label>{!editingId && <button type="button" className="batch-add-trigger" onClick={() => setBatchAdding(true)}><Plus size={16} />批量添加</button>}</div>
             <label><span>备注</span><input value={note} maxLength={60} onChange={event => setNote(event.target.value)} placeholder="可选备注" /></label>
           </div>
           <div className="composer-actions">
@@ -362,6 +359,7 @@ function TodayPage({ data }) {
         </div>
       </section>
       {manageTags && <TagManager data={data} type={manageTags} onClose={() => setManageTags(null)} />}
+      {customTags && <CustomTagModal type={customTags} onClose={() => setCustomTags(null)} />}
       {batchAdding && <BatchEntryModal data={data} onClose={() => setBatchAdding(false)} />}
     </div>
   );
