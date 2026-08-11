@@ -90,11 +90,13 @@ contextBridge.exposeInMainWorld("pomodoroApi", {
 contextBridge.exposeInMainWorld("financeApi", {
   getAll: () => ipcRenderer.invoke("finance:getAll"),
   add: (entry) => ipcRenderer.invoke("finance:add", entry || {}),
+  batchAdd: (entries) => ipcRenderer.invoke("finance:batch-add", entries || []),
   update: (id, patch) => ipcRenderer.invoke("finance:update", { id, patch }),
   delete: (id) => ipcRenderer.invoke("finance:delete", id),
   addTag: (type, name) => ipcRenderer.invoke("finance:tag-add", { type, name }),
   renameTag: (type, oldName, newName) => ipcRenderer.invoke("finance:tag-rename", { type, oldName, newName }),
   deleteTag: (type, name) => ipcRenderer.invoke("finance:tag-delete", { type, name }),
+  reorderTags: (type, orderedTags) => ipcRenderer.invoke("finance:tag-reorder", { type, orderedTags }),
   exportJson: () => ipcRenderer.invoke("finance:export"),
   importJson: () => ipcRenderer.invoke("finance:import"),
   onChanged: (callback) => {

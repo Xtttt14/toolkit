@@ -48,7 +48,11 @@ const defaultTodoData = {
 // ─── 记账 默认设置 ───
 const defaultFinanceData = {
   entries: [],
-  customTags: { income: [], expense: [] }
+  customTags: { income: [], expense: [] },
+  tagSettings: {
+    income: { order: [], hidden: [] },
+    expense: { order: [], hidden: [] }
+  }
 };
 // ─── 番茄钟 默认数据 ───
 const defaultPomodoroData = {
@@ -140,6 +144,10 @@ function initStores() {
           income: { type: "array", default: [] },
           expense: { type: "array", default: [] }
         }
+      },
+      tagSettings: {
+        type: "object",
+        default: defaultFinanceData.tagSettings
       }
     }
   });
@@ -570,13 +578,24 @@ function normalizeFinanceTags(tags = {}) {
   };
 }
 
+function normalizeFinanceTagSettings(settings = {}, customTags = {}) {
+  return Object.fromEntries(["income", "expense"].map(type => {
+    const available = [...fixedFinanceTags[type], ...normalizeFinanceTags(customTags)[type]];
+    const value = settings?.[type] || {};
+    const hidden = normalizeStringList(value.hidden).filter(tag => available.includes(tag));
+    const listed = normalizeStringList(value.order).filter(tag => available.includes(tag) && !hidden.includes(tag));
+    return [type, { order: [...listed, ...available.filter(tag => !hidden.includes(tag) && !listed.includes(tag))], hidden }];
+  }));
+}
+
 function getFinanceData() {
   const entries = financeStore.get("entries", [])
     .map(normalizeFinanceEntry)
     .filter(entry => entry.amount > 0)
     .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
   const customTags = normalizeFinanceTags(financeStore.get("customTags", {}));
-  return { version: 1, entries, customTags };
+  const tagSettings = normalizeFinanceTagSettings(financeStore.get("tagSettings", {}), customTags);
+  return { version: 2, entries, customTags, tagSettings };
 }
 
 function saveFinanceData(data) {
@@ -584,6 +603,9 @@ function saveFinanceData(data) {
     financeStore.set("entries", data.entries.map(normalizeFinanceEntry).filter(entry => entry.amount > 0));
   }
   if (data.customTags !== undefined) financeStore.set("customTags", normalizeFinanceTags(data.customTags));
+  if (data.tagSettings !== undefined) {
+    financeStore.set("tagSettings", normalizeFinanceTagSettings(data.tagSettings, data.customTags ?? financeStore.get("customTags", {})));
+  }
 }
 
 function broadcastFinance() {
@@ -1199,6 +1221,16 @@ ipcMain.handle("finance:add", (_, entry) => {
   broadcastFinance();
   return getFinanceData();
 });
+ipcMain.handle("finance:batch-add", (_, entries) => {
+  if (!Array.isArray(entries) || !entries.length) return getFinanceData();
+  const normalized = entries.slice(0, 366).map(normalizeFinanceEntry).filter(entry => entry.amount > 0);
+  if (!normalized.length) throw new Error("金额必须大于0");
+  const data = getFinanceData();
+  data.entries.push(...normalized);
+  saveFinanceData(data);
+  broadcastFinance();
+  return getFinanceData();
+});
 ipcMain.handle("finance:update", (_, { id, patch }) => {
   const data = getFinanceData();
   const index = data.entries.findIndex(entry => entry.id === String(id));
@@ -1230,6 +1262,7 @@ ipcMain.handle("finance:tag-add", (_, { type, name }) => {
   const allTags = [...fixedFinanceTags[safeType], ...data.customTags[safeType]];
   if (cleanName && !allTags.includes(cleanName)) {
     data.customTags[safeType].push(cleanName);
+    data.tagSettings[safeType].order.push(cleanName);
     saveFinanceData(data);
     broadcastFinance();
   }
@@ -1244,6 +1277,7 @@ ipcMain.handle("finance:tag-rename", (_, { type, oldName, newName }) => {
   const allTags = [...fixedFinanceTags[safeType], ...data.customTags[safeType].filter(item => item !== oldTag)];
   if (index >= 0 && nextTag && !allTags.includes(nextTag)) {
     data.customTags[safeType][index] = nextTag;
+    data.tagSettings[safeType].order = data.tagSettings[safeType].order.map(item => item === oldTag ? nextTag : item);
     data.entries = data.entries.map(entry => (
       entry.type === safeType && entry.tag === oldTag ? { ...entry, tag: nextTag, updatedAt: new Date().toISOString() } : entry
     ));
@@ -1256,7 +1290,23 @@ ipcMain.handle("finance:tag-delete", (_, { type, name }) => {
   const safeType = type === "income" ? "income" : "expense";
   const cleanName = String(name || "").trim();
   const data = getFinanceData();
-  data.customTags[safeType] = data.customTags[safeType].filter(item => item !== cleanName);
+  if (data.customTags[safeType].includes(cleanName)) {
+    data.customTags[safeType] = data.customTags[safeType].filter(item => item !== cleanName);
+  } else if (fixedFinanceTags[safeType].includes(cleanName) && !data.tagSettings[safeType].hidden.includes(cleanName)) {
+    data.tagSettings[safeType].hidden.push(cleanName);
+  }
+  data.tagSettings[safeType].order = data.tagSettings[safeType].order.filter(item => item !== cleanName);
+  saveFinanceData(data);
+  broadcastFinance();
+  return getFinanceData();
+});
+ipcMain.handle("finance:tag-reorder", (_, { type, orderedTags }) => {
+  const safeType = type === "income" ? "income" : "expense";
+  const data = getFinanceData();
+  const available = [...fixedFinanceTags[safeType], ...data.customTags[safeType]]
+    .filter(tag => !data.tagSettings[safeType].hidden.includes(tag));
+  const ordered = normalizeStringList(orderedTags).filter(tag => available.includes(tag));
+  data.tagSettings[safeType].order = [...ordered, ...available.filter(tag => !ordered.includes(tag))];
   saveFinanceData(data);
   broadcastFinance();
   return getFinanceData();

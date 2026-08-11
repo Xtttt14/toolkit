@@ -15,6 +15,7 @@ const at = offset => {
 let data = {
   version: 1,
   customTags: { income: ["项目奖金"], expense: ["订阅服务"] },
+  tagSettings: { income: { order: [], hidden: [] }, expense: { order: [], hidden: [] } },
   entries: [
     { id: "1", type: "expense", amount: 28.5, tag: "三餐", note: "午餐", date: at(0), createdAt: "2026-07-29T10:00:00.000Z" },
     { id: "2", type: "expense", amount: 16, tag: "交通", note: "地铁", date: at(0), createdAt: "2026-07-29T09:00:00.000Z" },
@@ -31,6 +32,11 @@ contextBridge.exposeInMainWorld("financeApi", {
   getAll: async () => structuredClone(data),
   add: async entry => {
     data.entries.push({ ...entry, id: String(Date.now()), createdAt: new Date().toISOString() });
+    emit();
+    return structuredClone(data);
+  },
+  batchAdd: async entries => {
+    entries.forEach(entry => data.entries.push({ ...entry, id: `${Date.now()}-${Math.random()}`, createdAt: new Date().toISOString() }));
     emit();
     return structuredClone(data);
   },
@@ -55,6 +61,11 @@ contextBridge.exposeInMainWorld("financeApi", {
   deleteTag: async (type, name) => {
     data.customTags[type] = data.customTags[type].filter(item => item !== name);
     emit();
+  },
+  reorderTags: async (type, orderedTags) => {
+    data.tagSettings[type].order = orderedTags;
+    emit();
+    return structuredClone(data);
   },
   exportJson: async () => ({ status: "exported" }),
   importJson: async () => ({ status: "canceled" }),

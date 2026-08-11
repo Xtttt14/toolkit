@@ -3,7 +3,7 @@ import {
   Baby, Banknote, BookOpen, BriefcaseBusiness, Bus, CalendarDays, ChevronLeft,
   ChevronRight, CircleDollarSign, Coffee, Download, Dumbbell, Fuel, Gamepad2,
   Gift, HeartPulse, House, LayoutGrid, MonitorSmartphone, MoreHorizontal, PawPrint,
-  Pencil, Phone, Plane, Plus, Save, Shirt, ShoppingBag, Sparkles, Tag, Trash2,
+  GripVertical, Pencil, Phone, Plane, Plus, Save, Settings2, Shirt, ShoppingBag, Sparkles, Tag, Trash2,
   TrendingUp, Upload, Users, Utensils, Wallet, Wine, X, Zap
 } from "lucide-react";
 import MenuSelect from "../../components/MenuSelect";
@@ -49,6 +49,25 @@ const sumEntries = entries => entries.reduce((acc, entry) => {
   acc[entry.type] += Number(entry.amount);
   return acc;
 }, { income: 0, expense: 0 });
+const tagsFor = (data, type) => {
+  const defaults = type === "income" ? incomeTags : expenseTags;
+  const byName = new Map([...defaults, ...(data.customTags[type] || []).map(item => [item, Tag])]);
+  const settings = data.tagSettings?.[type] || {};
+  const hidden = new Set(settings.hidden || []);
+  const available = [...byName.keys()].filter(name => !hidden.has(name));
+  const order = (settings.order || []).filter(name => available.includes(name));
+  return [...order, ...available.filter(name => !order.includes(name))].map(name => [name, byName.get(name)]);
+};
+const datesBetween = (start, end) => {
+  const result = [];
+  let current = parseDate(start);
+  const last = parseDate(end);
+  while (current <= last && result.length < 366) {
+    result.push(dateKey(current));
+    current = shiftDate(current, 1);
+  }
+  return result;
+};
 
 function EmptyState({ text }) {
   return (
@@ -113,12 +132,9 @@ function EntryList({ entries, onEdit, onDelete, pageSize = 4 }) {
 function TagManager({ data, type, onClose }) {
   const [name, setName] = useState("");
   const [editing, setEditing] = useState(null);
-  const [page, setPage] = useState(0);
-  const tags = data.customTags[type] || [];
-  const pageSize = 7;
-  const pages = Math.max(1, Math.ceil(tags.length / pageSize));
-  const visibleTags = tags.slice(page * pageSize, page * pageSize + pageSize);
-  useEffect(() => setPage(current => Math.min(current, pages - 1)), [pages]);
+  const [managing, setManaging] = useState(false);
+  const [dragging, setDragging] = useState(null);
+  const tags = tagsFor(data, type).map(([item]) => item);
 
   const submit = async event => {
     event.preventDefault();
@@ -130,11 +146,22 @@ function TagManager({ data, type, onClose }) {
     setEditing(null);
   };
 
+  const moveTag = async target => {
+    if (!dragging || dragging === target) return;
+    const ordered = [...tags];
+    const from = ordered.indexOf(dragging);
+    const to = ordered.indexOf(target);
+    ordered.splice(from, 1);
+    ordered.splice(to, 0, dragging);
+    await window.financeApi.reorderTags(type, ordered);
+    setDragging(null);
+  };
+
   return (
     <div className="finance-modal-backdrop" onMouseDown={onClose}>
       <section className="finance-modal" onMouseDown={event => event.stopPropagation()}>
         <header>
-          <div><span>分类设置</span><h2>{type === "income" ? "收入" : "支出"}自定义标签</h2></div>
+          <div><span>分类设置</span><h2>{type === "income" ? "收入" : "支出"}标签</h2></div>
           <button onClick={onClose} aria-label="关闭"><X size={20} /></button>
         </header>
         <form onSubmit={submit} className="tag-form">
@@ -147,21 +174,66 @@ function TagManager({ data, type, onClose }) {
           />
           <button type="submit">{editing ? "保存修改" : "新增标签"}</button>
         </form>
+        <button type="button" className={`tag-manage-switch ${managing ? "active" : ""}`} onClick={() => setManaging(value => !value)}>
+          <Settings2 size={16} />{managing ? "完成管理" : "管理标签"}
+        </button>
         <div className="custom-tag-list">
-          {tags.length ? visibleTags.map(item => (
-            <div key={item}>
-              <span><Tag size={16} />{item}</span>
-              <div>
-                <button onClick={() => { setEditing(item); setName(item); }} aria-label={`修改${item}`}><Pencil size={15} /></button>
+          {tags.length ? tags.map(item => (
+            <div
+              key={item}
+              className={dragging === item ? "dragging" : ""}
+              draggable={managing}
+              onDragStart={() => setDragging(item)}
+              onDragOver={event => { if (managing) event.preventDefault(); }}
+              onDrop={() => moveTag(item)}
+              onDragEnd={() => setDragging(null)}
+            >
+              <span>{managing && <GripVertical className="tag-drag-handle" size={17} />}<Tag size={16} />{item}</span>
+              <div className={managing ? "visible" : ""}>
+                {(data.customTags[type] || []).includes(item) && <button onClick={() => { setEditing(item); setName(item); }} aria-label={`修改${item}`}><Pencil size={15} /></button>}
                 <button onClick={() => window.financeApi.deleteTag(type, item)} aria-label={`删除${item}`}><Trash2 size={15} /></button>
               </div>
             </div>
-          )) : <EmptyState text="暂无自定义标签" />}
-          <Pager page={page} pages={pages} onChange={setPage} />
+          )) : <EmptyState text="暂无标签" />}
         </div>
       </section>
     </div>
   );
+}
+
+function BatchEntryModal({ data, onClose }) {
+  const today = dateKey();
+  const [type, setType] = useState("expense");
+  const [amount, setAmount] = useState("");
+  const [tag, setTag] = useState(expenseTags[0][0]);
+  const [note, setNote] = useState("");
+  const [start, setStart] = useState(today);
+  const [end, setEnd] = useState(today);
+  const [message, setMessage] = useState("");
+  const tags = tagsFor(data, type).map(([name]) => name);
+  const changeType = nextType => { setType(nextType); setTag(tagsFor(data, nextType)[0]?.[0] || ""); };
+  const submit = async event => {
+    event.preventDefault();
+    const numericAmount = Number(amount);
+    if (!numericAmount || numericAmount <= 0) return setMessage("请输入大于0的金额");
+    if (start > end) return setMessage("结束日期不能早于开始日期");
+    const dates = datesBetween(start, end);
+    await window.financeApi.batchAdd(dates.map(date => ({ type, amount: numericAmount, tag, note: note.trim(), date })));
+    onClose();
+  };
+  return <div className="finance-modal-backdrop" onMouseDown={onClose}>
+    <section className="finance-modal batch-entry-modal" onMouseDown={event => event.stopPropagation()}>
+      <header><div><span>连续日期记账</span><h2>批量添加账单</h2></div><button onClick={onClose} aria-label="关闭"><X size={20} /></button></header>
+      <form className="calendar-edit-form" onSubmit={submit}>
+        <div className="type-switch"><button type="button" className={type === "expense" ? "active expense" : ""} onClick={() => changeType("expense")}>支出</button><button type="button" className={type === "income" ? "active income" : ""} onClick={() => changeType("income")}>收入</button></div>
+        <div className="calendar-edit-row"><label><span>金额</span><input className="finance-amount-input" autoFocus value={amount} inputMode="decimal" onChange={event => setAmount(event.target.value)} /></label><label><span>标签</span><MenuSelect value={tag} ariaLabel="批量账单标签" onChange={setTag} options={tags.map(item => ({ value:item, label:item }))} /></label></div>
+        <div className="calendar-edit-row"><label><span>开始日期</span><input type="date" value={start} onChange={event => setStart(event.target.value)} /></label><label><span>结束日期</span><input type="date" value={end} onChange={event => setEnd(event.target.value)} /></label></div>
+        <label><span>备注</span><input value={note} maxLength={60} onChange={event => setNote(event.target.value)} placeholder="可选备注" /></label>
+        <div className="batch-hint">将添加{start <= end ? datesBetween(start, end).length : 0}笔账目（最多366天）</div>
+        <div className="calendar-edit-actions"><span className="save-message">{message}</span><button type="button" onClick={onClose}>取消</button><button type="submit"><Save size={16} />批量保存</button></div>
+      </form>
+    </section>
+  </div>;
 }
 
 function TodayPage({ data }) {
@@ -173,13 +245,13 @@ function TodayPage({ data }) {
   const [date, setDate] = useState(today);
   const [editingId, setEditingId] = useState(null);
   const [manageTags, setManageTags] = useState(null);
+  const [batchAdding, setBatchAdding] = useState(false);
   const [message, setMessage] = useState("");
   const [tagPage, setTagPage] = useState(0);
 
   const tags = useMemo(() => {
-    const defaults = type === "income" ? incomeTags : expenseTags;
-    return [...defaults, ...(data.customTags[type] || []).map(item => [item, Tag])];
-  }, [data.customTags, type]);
+    return tagsFor(data, type);
+  }, [data, type]);
   const todayEntries = useMemo(
     () => data.entries.filter(entry => entry.date === today).sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
     [data.entries, today]
@@ -238,6 +310,7 @@ function TodayPage({ data }) {
       <section className="finance-card entry-composer">
         <div className="composer-heading">
           <div><span>快速记录</span><h2>{editingId ? "编辑账目" : "记一笔"}</h2></div>
+          {!editingId && <button type="button" className="batch-add-trigger" onClick={() => setBatchAdding(true)}><Plus size={16} />批量添加</button>}
           <div className="type-switch">
             <button className={type === "expense" ? "active expense" : ""} onClick={() => chooseType("expense")}>支出</button>
             <button className={type === "income" ? "active income" : ""} onClick={() => chooseType("income")}>收入</button>
@@ -289,6 +362,7 @@ function TodayPage({ data }) {
         </div>
       </section>
       {manageTags && <TagManager data={data} type={manageTags} onClose={() => setManageTags(null)} />}
+      {batchAdding && <BatchEntryModal data={data} onClose={() => setBatchAdding(false)} />}
     </div>
   );
 }
@@ -299,10 +373,7 @@ function EntryEditModal({ entry, data, onClose }) {
   const [tag, setTag] = useState(entry.tag);
   const [date, setDate] = useState(entry.date);
   const [note, setNote] = useState(entry.note || "");
-  const tags = [
-    ...(type === "income" ? incomeTags : expenseTags).map(([name]) => name),
-    ...(data.customTags[type] || [])
-  ];
+  const tags = tagsFor(data, type).map(([name]) => name);
 
   const changeType = nextType => {
     setType(nextType);
