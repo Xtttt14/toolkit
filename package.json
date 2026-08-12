@@ -1,6 +1,6 @@
 {
   "name": "personal-toolbox",
-  "version": "1.6.8",
+  "version": "1.6.9",
   "private": true,
   "description": "个人本地工具箱 - 饮水提醒 · 待办清单 · 番茄钟 · 记账助手",
   "main": "electron/main.js",

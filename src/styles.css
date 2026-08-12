@@ -1060,7 +1060,7 @@ h1 { margin: 0; color: #0f1720; font-size: clamp(32px, 4vw, 48px); line-height: 
 .tag-grid button.selected { color:#8b6428; }
 .tag-grid .manage-tag { border-style:dashed; color:var(--finance-gold); }
 .entry-meta { display:grid; grid-template-columns:minmax(130px,.42fr) minmax(0,1fr); gap:10px; }
-.entry-date-actions { display:grid; align-content:start; gap:7px; }
+.entry-utility { display:flex; align-items:flex-end; }
 .entry-meta input, .tag-form input {
   width:100%; height:38px; padding:0 12px; border:1px solid #dfe2dd; border-radius:8px; outline:none; color:var(--finance-ink); background:#fafaf7;
 }
@@ -1073,6 +1073,10 @@ h1 { margin: 0; color: #0f1720; font-size: clamp(32px, 4vw, 48px); line-height: 
 .today-ledger { padding:clamp(15px,1.8vw,24px); display:grid; grid-template-rows:auto minmax(0,1fr) auto; gap:12px; }
 .ledger-heading { padding-bottom:10px; border-bottom:1px solid var(--finance-line); }
 .today-balance { display:flex; gap:clamp(8px,1.2vw,18px); }
+.ledger-date-area { display:grid; justify-items:end; gap:8px; }
+.ledger-date-area label { display:flex; align-items:center; gap:7px; color:var(--finance-muted); font-size:10px; }
+.ledger-date-area input { width:124px; height:27px; padding:0 6px; border:1px solid #dfe2dd; border-radius:6px; color:var(--finance-ink); background:#fafaf7; font-size:11px; }
+.ledger-date-area input:focus { outline:0; border-color:rgba(180,138,70,.62); box-shadow:0 0 0 3px rgba(180,138,70,.08); }
 .today-balance span { color:var(--finance-muted); font-size:10px; text-align:right; }
 .today-balance b { display:block; margin-top:4px; color:var(--finance-ink); font-size:clamp(12px,1.1vw,16px); }
 .finance-entry-area { min-height:0; display:grid; grid-template-rows:minmax(0,1fr) auto; gap:6px; }

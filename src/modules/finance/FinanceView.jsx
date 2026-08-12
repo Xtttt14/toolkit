@@ -198,14 +198,13 @@ function CustomTagModal({ type, onClose }) {
   </div>;
 }
 
-function BatchEntryModal({ data, onClose }) {
-  const today = dateKey();
+function BatchEntryModal({ data, initialDate, onClose }) {
   const [type, setType] = useState("expense");
   const [amount, setAmount] = useState("");
   const [tag, setTag] = useState(expenseTags[0][0]);
   const [note, setNote] = useState("");
-  const [start, setStart] = useState(today);
-  const [end, setEnd] = useState(today);
+  const [start, setStart] = useState(initialDate);
+  const [end, setEnd] = useState(initialDate);
   const [message, setMessage] = useState("");
   const tags = tagsFor(data, type).map(([name]) => name);
   const changeType = nextType => { setType(nextType); setTag(tagsFor(data, nextType)[0]?.[0] || ""); };
@@ -239,7 +238,7 @@ function TodayPage({ data }) {
   const [amount, setAmount] = useState("");
   const [tag, setTag] = useState(expenseTags[0][0]);
   const [note, setNote] = useState("");
-  const [date, setDate] = useState(today);
+  const [selectedDate, setSelectedDate] = useState(today);
   const [editingId, setEditingId] = useState(null);
   const [manageTags, setManageTags] = useState(null);
   const [customTags, setCustomTags] = useState(null);
@@ -250,11 +249,11 @@ function TodayPage({ data }) {
   const tags = useMemo(() => {
     return tagsFor(data, type);
   }, [data, type]);
-  const todayEntries = useMemo(
-    () => data.entries.filter(entry => entry.date === today).sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
-    [data.entries, today]
+  const selectedEntries = useMemo(
+    () => data.entries.filter(entry => entry.date === selectedDate).sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    [data.entries, selectedDate]
   );
-  const todayTotals = sumEntries(todayEntries);
+  const selectedTotals = sumEntries(selectedEntries);
   const tagPageSize = 23;
   const tagPages = Math.max(1, Math.ceil(tags.length / tagPageSize));
   const visibleTags = tags.slice(tagPage * tagPageSize, tagPage * tagPageSize + tagPageSize);
@@ -268,7 +267,6 @@ function TodayPage({ data }) {
     const chosenType = nextType || type;
     setAmount("");
     setNote("");
-    setDate(today);
     setEditingId(null);
     setTag((chosenType === "income" ? incomeTags : expenseTags)[0][0]);
   };
@@ -286,7 +284,7 @@ function TodayPage({ data }) {
       setMessage("请输入大于0的金额");
       return;
     }
-    const payload = { type, amount: numericAmount, tag, note: note.trim(), date };
+    const payload = { type, amount: numericAmount, tag, note: note.trim(), date: selectedDate };
     if (editingId) await window.financeApi.update(editingId, payload);
     else await window.financeApi.add(payload);
     setMessage(editingId ? "账目已更新" : "账目已保存");
@@ -299,7 +297,6 @@ function TodayPage({ data }) {
     setAmount(String(entry.amount));
     setTag(entry.tag);
     setNote(entry.note || "");
-    setDate(entry.date);
     setEditingId(entry.id);
   };
 
@@ -333,7 +330,7 @@ function TodayPage({ data }) {
             <Pager page={tagPage} pages={tagPages} onChange={setTagPage} />
           </div>
           <div className="entry-meta">
-            <div className="entry-date-actions"><label><span>日期</span><input type="date" value={date} onChange={event => setDate(event.target.value)} /></label>{!editingId && <button type="button" className="batch-add-trigger" onClick={() => setBatchAdding(true)}><Plus size={16} />批量添加</button>}</div>
+            <div className="entry-utility">{!editingId && <button type="button" className="batch-add-trigger" onClick={() => setBatchAdding(true)}><Plus size={16} />批量添加</button>}</div>
             <label><span>备注</span><input value={note} maxLength={60} onChange={event => setNote(event.target.value)} placeholder="可选备注" /></label>
           </div>
           <div className="composer-actions">
@@ -346,13 +343,16 @@ function TodayPage({ data }) {
 
       <section className="finance-card today-ledger">
         <header className="ledger-heading">
-          <div><span>{today}</span><h2>今日账目</h2></div>
-          <div className="today-balance">
-            <span>收入<b>¥{money(todayTotals.income)}</b></span>
-            <span>支出<b>¥{money(todayTotals.expense)}</b></span>
+          <div><span>{selectedDate === today ? "今天" : "查看日期"}</span><h2>{selectedDate === today ? "今日账目" : "当天账目"}</h2></div>
+          <div className="ledger-date-area">
+            <label><span>账单日期</span><input type="date" value={selectedDate} onChange={event => { setSelectedDate(event.target.value); reset(); }} /></label>
+            <div className="today-balance">
+              <span>收入<b>¥{money(selectedTotals.income)}</b></span>
+              <span>支出<b>¥{money(selectedTotals.expense)}</b></span>
+            </div>
           </div>
         </header>
-        <EntryList entries={todayEntries} onEdit={editEntry} onDelete={window.financeApi.delete} />
+        <EntryList entries={selectedEntries} onEdit={editEntry} onDelete={window.financeApi.delete} />
         <div className="backup-actions">
           <button onClick={window.financeApi.importJson}><Upload size={16} />恢复JSON</button>
           <button onClick={window.financeApi.exportJson}><Download size={16} />导出JSON</button>
@@ -360,7 +360,7 @@ function TodayPage({ data }) {
       </section>
       {manageTags && <TagManager data={data} type={manageTags} onClose={() => setManageTags(null)} />}
       {customTags && <CustomTagModal type={customTags} onClose={() => setCustomTags(null)} />}
-      {batchAdding && <BatchEntryModal data={data} onClose={() => setBatchAdding(false)} />}
+      {batchAdding && <BatchEntryModal data={data} initialDate={selectedDate} onClose={() => setBatchAdding(false)} />}
     </div>
   );
 }
