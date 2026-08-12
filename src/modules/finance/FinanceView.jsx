@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Baby, Banknote, BookOpen, BriefcaseBusiness, Bus, CalendarDays, ChevronLeft,
   ChevronRight, CircleDollarSign, Coffee, Download, Dumbbell, Fuel, Gamepad2,
@@ -376,8 +377,13 @@ function EntryEditModal({ entry, data, onClose }) {
   useEffect(() => {
     const page = document.querySelector(".finance-page");
     const previousOverflow = page?.style.overflow;
+    const previousScrollTop = page?.scrollTop || 0;
     if (page) page.style.overflow = "hidden";
-    return () => { if (page) page.style.overflow = previousOverflow; };
+    return () => {
+      if (!page) return;
+      page.style.overflow = previousOverflow;
+      requestAnimationFrame(() => requestAnimationFrame(() => { page.scrollTop = previousScrollTop; }));
+    };
   }, []);
 
   const changeType = nextType => {
@@ -395,7 +401,7 @@ function EntryEditModal({ entry, data, onClose }) {
     onClose();
   };
 
-  return (
+  return createPortal(
     <div className="finance-modal-backdrop" onMouseDown={onClose} onWheel={event => event.preventDefault()}>
       <section className="finance-modal entry-edit-modal" onMouseDown={event => event.stopPropagation()}>
         <header>
@@ -419,7 +425,7 @@ function EntryEditModal({ entry, data, onClose }) {
           </div>
         </form>
       </section>
-    </div>
+    </div>, document.body
   );
 }
 
@@ -770,6 +776,7 @@ function ProjectDetail({ project, data, onBack }) {
   const [linkDate, setLinkDate] = useState(dateKey());
   const [recordPage, setRecordPage] = useState(0);
   const [editingLinkedEntry, setEditingLinkedEntry] = useState(null);
+  const [editingManualRecord, setEditingManualRecord] = useState(null);
   const linkedEntries = projectEntries(project, data.entries);
   const records = project.records || [];
   const total = projectTotal(project, data.entries);
@@ -804,16 +811,6 @@ function ProjectDetail({ project, data, onBack }) {
       : [...linkedEntryIds, entryId];
     await window.financeApi.updateTotalProject(project.id, { linkedEntryIds: next });
   };
-  const editRecord = async record => {
-    const amountValue = window.prompt("金额", String(record.amount));
-    if (amountValue === null) return;
-    const noteValue = window.prompt("备注（可留空）", record.note || "");
-    if (noteValue === null) return;
-    const dateValue = window.prompt("日期（可留空，格式 YYYY-MM-DD）", record.date || "");
-    if (dateValue === null) return;
-    await window.financeApi.updateTotalRecord(project.id, record.id, { amount: Number(amountValue), note: noteValue, date: dateValue || null });
-  };
-
   return (
     <div className="finance-page total-project-detail">
       <section className="finance-card total-project-hero">
@@ -845,13 +842,54 @@ function ProjectDetail({ project, data, onBack }) {
       <section className="finance-card total-records-card">
         <header><div><span>全部记录</span><h2>逐笔明细</h2></div><b>{allRecords.length} 笔</b></header>
         <div className="total-record-list">
-          {visibleRecords.map(record => <article key={`${record.source}-${record.id}`}><div><i className={record.source} /> <span><strong>{record.note || "无备注"}</strong><small>{record.source === "ledger" ? `关联账单${record.date ? ` · ${record.date}` : ""}` : `直接添加${record.date ? ` · ${record.date}` : ""}`}</small></span></div><b>¥{money(record.amount)}</b><div className="total-record-actions"><button onClick={() => record.source === "ledger" ? setEditingLinkedEntry(record) : editRecord(record)} aria-label="编辑记录"><Pencil size={14} /></button>{record.source === "manual" && <button onClick={() => window.financeApi.deleteTotalRecord(project.id, record.id)} aria-label="删除记录"><Trash2 size={14} /></button>}</div></article>)}
+          {visibleRecords.map(record => <article key={`${record.source}-${record.id}`}><div><i className={record.source} /> <span><strong>{record.note || "无备注"}</strong><small>{record.source === "ledger" ? `关联账单${record.date ? ` · ${record.date}` : ""}` : `直接添加${record.date ? ` · ${record.date}` : ""}`}</small></span></div><b>¥{money(record.amount)}</b><div className="total-record-actions"><button onClick={() => record.source === "ledger" ? setEditingLinkedEntry(record) : setEditingManualRecord(record)} aria-label="编辑记录"><Pencil size={14} /></button>{record.source === "manual" && <button onClick={() => window.financeApi.deleteTotalRecord(project.id, record.id)} aria-label="删除记录"><Trash2 size={14} /></button>}</div></article>)}
           {!allRecords.length && <EmptyState text="这里会保留该项目的每一笔记录" />}
         </div>
         <Pager page={recordPage} pages={recordPages} onChange={setRecordPage} />
       </section>
       {editingLinkedEntry && <EntryEditModal entry={editingLinkedEntry} data={data} onClose={() => setEditingLinkedEntry(null)} />}
+      {editingManualRecord && <TotalRecordEditModal projectId={project.id} record={editingManualRecord} onClose={() => setEditingManualRecord(null)} />}
     </div>
+  );
+}
+
+function TotalRecordEditModal({ projectId, record, onClose }) {
+  const [amount, setAmount] = useState(String(record.amount));
+  const [note, setNote] = useState(record.note || "");
+  const [date, setDate] = useState(record.date || "");
+
+  useEffect(() => {
+    const page = document.querySelector(".finance-page");
+    const previousOverflow = page?.style.overflow;
+    const previousScrollTop = page?.scrollTop || 0;
+    if (page) page.style.overflow = "hidden";
+    return () => {
+      if (!page) return;
+      page.style.overflow = previousOverflow;
+      requestAnimationFrame(() => requestAnimationFrame(() => { page.scrollTop = previousScrollTop; }));
+    };
+  }, []);
+
+  const submit = async event => {
+    event.preventDefault();
+    const numericAmount = Number(amount);
+    if (!numericAmount || numericAmount <= 0) return;
+    await window.financeApi.updateTotalRecord(projectId, record.id, { amount: numericAmount, note: note.trim(), date: date || null });
+    onClose();
+  };
+
+  return createPortal(
+    <div className="finance-modal-backdrop" onMouseDown={onClose} onWheel={event => event.preventDefault()}>
+      <section className="finance-modal total-record-edit-modal" onMouseDown={event => event.stopPropagation()}>
+        <header><div><span>独立记录</span><h2>编辑记录</h2></div><button onClick={onClose} aria-label="关闭"><X size={20} /></button></header>
+        <form className="calendar-edit-form" onSubmit={submit}>
+          <label><span>金额</span><input className="finance-amount-input" autoFocus value={amount} inputMode="decimal" onChange={event => setAmount(event.target.value)} /></label>
+          <label><span>备注（可选）</span><input value={note} maxLength={120} onChange={event => setNote(event.target.value)} placeholder="可选备注" /></label>
+          <label><span>日期（可选）</span><input type="date" value={date} onChange={event => setDate(event.target.value)} /></label>
+          <div className="calendar-edit-actions"><button type="button" onClick={onClose}>取消</button><button type="submit"><Save size={16} />保存修改</button></div>
+        </form>
+      </section>
+    </div>, document.body
   );
 }
 
