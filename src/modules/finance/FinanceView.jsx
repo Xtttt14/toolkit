@@ -373,6 +373,13 @@ function EntryEditModal({ entry, data, onClose }) {
   const [note, setNote] = useState(entry.note || "");
   const tags = tagsFor(data, type).map(([name]) => name);
 
+  useEffect(() => {
+    const page = document.querySelector(".finance-page");
+    const previousOverflow = page?.style.overflow;
+    if (page) page.style.overflow = "hidden";
+    return () => { if (page) page.style.overflow = previousOverflow; };
+  }, []);
+
   const changeType = nextType => {
     setType(nextType);
     setTag((nextType === "income" ? incomeTags : expenseTags)[0][0]);
@@ -389,7 +396,7 @@ function EntryEditModal({ entry, data, onClose }) {
   };
 
   return (
-    <div className="finance-modal-backdrop" onMouseDown={onClose}>
+    <div className="finance-modal-backdrop" onMouseDown={onClose} onWheel={event => event.preventDefault()}>
       <section className="finance-modal entry-edit-modal" onMouseDown={event => event.stopPropagation()}>
         <header>
           <div><span>{entry.date}</span><h2>编辑账目</h2></div>

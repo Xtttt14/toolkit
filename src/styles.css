@@ -1105,9 +1105,10 @@ h1 { margin: 0; color: #0f1720; font-size: clamp(32px, 4vw, 48px); line-height: 
 /* Tag dialog */
 .finance-modal-backdrop {
   position:fixed; inset:0; z-index:50; display:grid; place-items:center; padding:20px;
+  overflow:hidden; overscroll-behavior:contain; touch-action:none;
   background:rgba(24,30,28,.35); backdrop-filter:blur(5px);
 }
-.finance-modal { width:min(470px,92vw); max-height:min(620px,86vh); padding:22px; display:grid; grid-template-rows:auto auto auto minmax(0,1fr); gap:12px; overflow:hidden; background:#fffefa; border-radius:15px; box-shadow:0 30px 90px rgba(23,29,27,.24); }
+.finance-modal { width:min(470px,92vw); max-height:min(620px,86vh); padding:22px; display:grid; grid-template-rows:auto auto auto minmax(0,1fr); gap:12px; overflow:hidden; touch-action:auto; background:#fffefa; border-radius:15px; box-shadow:0 30px 90px rgba(23,29,27,.24); }
 .finance-modal header > button { width:35px; height:35px; display:grid; place-items:center; color:#68726e; background:#efefeb; border-radius:8px; }
 .tag-form { display:grid; grid-template-columns:minmax(0,1fr) 96px; gap:8px; }
 .tag-form button { color:#fff; background:var(--finance-ink); border-radius:8px; }
