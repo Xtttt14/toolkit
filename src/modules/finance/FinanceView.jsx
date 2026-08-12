@@ -710,9 +710,17 @@ function TotalProjectsPage({ data }) {
     event.preventDefault();
     const name = newProjectName.trim();
     if (!name) return;
-    const next = await window.financeApi.addTotalProject({ name });
-    setSelectedId(next.totalProjects[0]?.id || null);
+    await window.financeApi.addTotalProject({ name });
     setNewProjectName("");
+  };
+  const renameProject = async project => {
+    const name = window.prompt("项目名称", project.name);
+    if (name?.trim() && name.trim() !== project.name) await window.financeApi.updateTotalProject(project.id, { name: name.trim() });
+  };
+  const deleteProject = async project => {
+    if (window.confirm(`删除“${project.name}”及其直接添加的记录吗？每日账单不会被删除。`)) {
+      await window.financeApi.deleteTotalProject(project.id);
+    }
   };
 
   if (selected) return <ProjectDetail project={selected} data={data} onBack={() => setSelectedId(null)} />;
@@ -720,22 +728,25 @@ function TotalProjectsPage({ data }) {
   return (
     <div className="finance-page total-projects-page">
       <section className="finance-card total-projects-intro">
-        <div><span>不按日期，只看累计</span><h2>总计项目</h2><p>为纸张、设备或任何长期关注的开销建立独立总计，并关联已有每日账单。</p></div>
+        <div><span>不按日期，只看累计</span><h2>总计项目</h2></div>
         <FolderKanban size={38} strokeWidth={1.4} />
       </section>
       <section className="finance-card total-projects-list-card">
         <header><div><span>项目列表</span><h2>你的累计项目</h2></div><b>{projects.length} 个</b></header>
         <form className="total-project-add" onSubmit={addProject}>
-          <input value={newProjectName} onChange={event => setNewProjectName(event.target.value)} maxLength={40} placeholder="例如：纸张采购" />
+          <input value={newProjectName} onChange={event => setNewProjectName(event.target.value)} maxLength={40} placeholder="例如：折纸用纸" />
           <button type="submit"><Plus size={16} />新建项目</button>
         </form>
         <div className="total-project-grid">
           {projects.map(project => (
-            <button className="total-project-card" key={project.id} onClick={() => setSelectedId(project.id)}>
-              <span><FolderKanban size={19} />{project.name}</span>
-              <strong>¥{money(projectTotal(project, data.entries))}</strong>
-              <small>{projectEntries(project, data.entries).length + project.records.length} 笔记录</small>
-            </button>
+            <article className="total-project-card" key={project.id}>
+              <button className="total-project-open" onClick={() => setSelectedId(project.id)}>
+                <span><FolderKanban size={19} />{project.name}</span>
+                <strong>¥{money(projectTotal(project, data.entries))}</strong>
+                <small>{projectEntries(project, data.entries).length + project.records.length} 笔记录</small>
+              </button>
+              <div className="total-project-card-actions"><button onClick={() => renameProject(project)} aria-label={`重命名${project.name}`}><Pencil size={14} /></button><button onClick={() => deleteProject(project)} aria-label={`删除${project.name}`}><Trash2 size={14} /></button></div>
+            </article>
           ))}
           {!projects.length && <EmptyState text="新建一个项目，开始累计关心的开销" />}
         </div>
@@ -749,6 +760,9 @@ function ProjectDetail({ project, data, onBack }) {
   const [note, setNote] = useState("");
   const [recordDate, setRecordDate] = useState("");
   const [showLinks, setShowLinks] = useState(false);
+  const [linkDate, setLinkDate] = useState(dateKey());
+  const [recordPage, setRecordPage] = useState(0);
+  const [editingLinkedEntry, setEditingLinkedEntry] = useState(null);
   const linkedEntries = projectEntries(project, data.entries);
   const records = project.records || [];
   const total = projectTotal(project, data.entries);
@@ -756,6 +770,18 @@ function ProjectDetail({ project, data, onBack }) {
     ...linkedEntries.map(entry => ({ ...entry, source: "ledger" })),
     ...records.map(record => ({ ...record, source: "manual" }))
   ].sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+  const recordPages = Math.max(1, Math.ceil(allRecords.length / 5));
+  const visibleRecords = allRecords.slice(recordPage * 5, recordPage * 5 + 5);
+  const selectableEntries = data.entries.filter(entry => entry.type === "expense" && entry.date === linkDate);
+
+  useEffect(() => {
+    setRecordPage(current => Math.min(current, recordPages - 1));
+  }, [recordPages]);
+  useEffect(() => {
+    const onKeyDown = event => { if (event.key === "Escape") onBack(); };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onBack]);
 
   const addRecord = async event => {
     event.preventDefault();
@@ -763,16 +789,6 @@ function ProjectDetail({ project, data, onBack }) {
     if (!numericAmount || numericAmount <= 0) return;
     await window.financeApi.addTotalRecord(project.id, { amount: numericAmount, note: note.trim(), date: recordDate || null });
     setAmount(""); setNote(""); setRecordDate("");
-  };
-  const renameProject = async () => {
-    const name = window.prompt("项目名称", project.name);
-    if (name?.trim() && name.trim() !== project.name) await window.financeApi.updateTotalProject(project.id, { name: name.trim() });
-  };
-  const deleteProject = async () => {
-    if (window.confirm(`删除“${project.name}”及其直接添加的记录吗？每日账单不会被删除。`)) {
-      await window.financeApi.deleteTotalProject(project.id);
-      onBack();
-    }
   };
   const toggleLink = async entryId => {
     const linkedEntryIds = project.linkedEntryIds || [];
@@ -796,14 +812,13 @@ function ProjectDetail({ project, data, onBack }) {
       <section className="finance-card total-project-hero">
         <button className="total-back" onClick={onBack}><ChevronLeft size={18} />全部项目</button>
         <div className="total-project-hero-main"><div><span>累计总额</span><h2>{project.name}</h2></div><strong>¥{money(total)}</strong></div>
-        <div className="total-project-hero-actions"><button onClick={renameProject}><Pencil size={15} />重命名</button><button className="danger" onClick={deleteProject}><Trash2 size={15} />删除项目</button></div>
       </section>
       <div className="total-project-detail-grid">
         <section className="finance-card total-record-composer">
           <header><div><span>独立记录</span><h2>直接增加</h2></div><FilePlus2 size={20} /></header>
           <form onSubmit={addRecord}>
             <label><span>金额</span><div><b>¥</b><input value={amount} inputMode="decimal" onChange={event => setAmount(event.target.value)} placeholder="0.00" /></div></label>
-            <label><span>备注（可选）</span><input value={note} maxLength={120} onChange={event => setNote(event.target.value)} placeholder="例如：一箱 A4 纸" /></label>
+            <label><span>备注（可选）</span><input value={note} maxLength={120} onChange={event => setNote(event.target.value)} placeholder="例如：10张25cm象皮纸" /></label>
             <label><span>日期（可选）</span><input type="date" value={recordDate} onChange={event => setRecordDate(event.target.value)} /></label>
             <button type="submit"><Save size={16} />添加记录</button>
           </form>
@@ -811,22 +826,24 @@ function ProjectDetail({ project, data, onBack }) {
         <section className="finance-card total-link-card">
           <header><div><span>每日账单</span><h2>关联已有记录</h2></div><button onClick={() => setShowLinks(value => !value)}><Link2 size={16} />{showLinks ? "收起" : "管理关联"}</button></header>
           <p>已关联 {linkedEntries.length} 笔。原账单改动或删除后，项目总额会自动同步。</p>
-          {showLinks && <div className="total-link-list">
-            {data.entries.filter(entry => entry.type === "expense").map(entry => {
+          {showLinks && <><label className="total-link-date"><span>账单日期</span><input type="date" value={linkDate} onChange={event => setLinkDate(event.target.value)} /></label><div className="total-link-list">
+            {selectableEntries.map(entry => {
               const checked = (project.linkedEntryIds || []).includes(entry.id);
-              return <label key={entry.id}><input type="checkbox" checked={checked} onChange={() => toggleLink(entry.id)} /><span><b>{entry.tag}</b><small>{entry.note || "无备注"}</small></span><strong>¥{money(entry.amount)}</strong></label>;
+              return <label key={entry.id}><input type="checkbox" checked={checked} onChange={() => toggleLink(entry.id)} /><span><b>{entry.note || "无备注"}</b><small>{entry.date}</small></span><strong>¥{money(entry.amount)}</strong></label>;
             })}
-            {!data.entries.some(entry => entry.type === "expense") && <EmptyState text="暂无可关联的支出账单" />}
-          </div>}
+            {!selectableEntries.length && <EmptyState text="这一天没有可关联的支出账单" />}
+          </div></>}
         </section>
       </div>
       <section className="finance-card total-records-card">
         <header><div><span>全部记录</span><h2>逐笔明细</h2></div><b>{allRecords.length} 笔</b></header>
         <div className="total-record-list">
-          {allRecords.map(record => <article key={`${record.source}-${record.id}`}><div><i className={record.source} /> <span><strong>{record.source === "ledger" ? record.tag : (record.note || "无备注")}</strong><small>{record.source === "ledger" ? `关联账单 · ${record.note || "无备注"}` : `直接添加${record.date ? ` · ${record.date}` : ""}`}</small></span></div><b>¥{money(record.amount)}</b>{record.source === "manual" && <div className="total-record-actions"><button onClick={() => editRecord(record)} aria-label="编辑记录"><Pencil size={14} /></button><button onClick={() => window.financeApi.deleteTotalRecord(project.id, record.id)} aria-label="删除记录"><Trash2 size={14} /></button></div>}</article>)}
+          {visibleRecords.map(record => <article key={`${record.source}-${record.id}`}><div><i className={record.source} /> <span><strong>{record.note || "无备注"}</strong><small>{record.source === "ledger" ? `关联账单${record.date ? ` · ${record.date}` : ""}` : `直接添加${record.date ? ` · ${record.date}` : ""}`}</small></span></div><b>¥{money(record.amount)}</b><div className="total-record-actions"><button onClick={() => record.source === "ledger" ? setEditingLinkedEntry(record) : editRecord(record)} aria-label="编辑记录"><Pencil size={14} /></button>{record.source === "manual" && <button onClick={() => window.financeApi.deleteTotalRecord(project.id, record.id)} aria-label="删除记录"><Trash2 size={14} /></button>}</div></article>)}
           {!allRecords.length && <EmptyState text="这里会保留该项目的每一笔记录" />}
         </div>
+        <Pager page={recordPage} pages={recordPages} onChange={setRecordPage} />
       </section>
+      {editingLinkedEntry && <EntryEditModal entry={editingLinkedEntry} data={data} onClose={() => setEditingLinkedEntry(null)} />}
     </div>
   );
 }
