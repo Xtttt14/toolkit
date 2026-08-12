@@ -770,6 +770,7 @@ function TotalProjectsPage({ data }) {
 
 function ProjectDetail({ project, data, onBack }) {
   const [amount, setAmount] = useState("");
+  const amountInputRef = useRef(null);
   const [note, setNote] = useState("");
   const [recordDate, setRecordDate] = useState("");
   const [showLinks, setShowLinks] = useState(false);
@@ -803,6 +804,7 @@ function ProjectDetail({ project, data, onBack }) {
     if (!numericAmount || numericAmount <= 0) return;
     await window.financeApi.addTotalRecord(project.id, { amount: numericAmount, note: note.trim(), date: recordDate || null });
     setAmount(""); setNote(""); setRecordDate("");
+    requestAnimationFrame(() => amountInputRef.current?.focus());
   };
   const toggleLink = async entryId => {
     const linkedEntryIds = project.linkedEntryIds || [];
@@ -821,7 +823,7 @@ function ProjectDetail({ project, data, onBack }) {
         <section className="finance-card total-record-composer">
           <header><div><span>独立记录</span><h2>直接增加</h2></div><FilePlus2 size={20} /></header>
           <form onSubmit={addRecord}>
-            <label><span>金额</span><div><b>¥</b><input value={amount} inputMode="decimal" onChange={event => setAmount(event.target.value)} placeholder="0.00" /></div></label>
+            <label><span>金额</span><div><b>¥</b><input ref={amountInputRef} value={amount} inputMode="decimal" onChange={event => setAmount(event.target.value)} placeholder="0.00" /></div></label>
             <label><span>备注（可选）</span><input value={note} maxLength={120} onChange={event => setNote(event.target.value)} placeholder="例如：10张25cm象皮纸" /></label>
             <label><span>日期（可选）</span><input type="date" value={recordDate} onChange={event => setRecordDate(event.target.value)} /></label>
             <button type="submit"><Save size={16} />添加记录</button>
