@@ -96,14 +96,14 @@ npm run dist
 
 安装版会在启动后自动检查 GitHub Releases 中的新版本。发现更新后，可以在“工具箱设置 → 软件更新”中下载，并重启完成更新；本地业务数据不会被覆盖。
 
-发布约定：每次完成并验证一个小功能后，均需发布一次Release更新。更新`package.json`中的版本号并推送标签，GitHub Actions会自动构建安装包、生成更新元数据并创建GitHub Release：
+交付约定：完成并验证小功能后，自动提交并推送至GitHub仓库，同时在本地构建安装包。仅在明确要求发布，或功能达到一个完整版本时，才更新`package.json`版本号、推送标签并发布Release。GitHub Actions会自动构建安装包、生成更新元数据并创建GitHub Release：
 
 ```powershell
 git tag v1.6.0
 git push origin v1.6.0
 ```
 
-构建结果位于`release/`目录。若需要单文件便携版，可继续运行`npm run dist:portable`；便携版不支持自动更新。
+本地安装包可通过`npm run dist`构建，结果位于`release/`目录。若需要单文件便携版，可继续运行`npm run dist:portable`；便携版不支持自动更新。
 
 ## 数据存储
 
