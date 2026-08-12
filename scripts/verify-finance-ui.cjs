@@ -26,7 +26,7 @@ async function inspect(window, name) {
 }
 
 async function inspectTheme(window, route, name) {
-  await window.loadURL(`http://127.0.0.1:5173/#/${route}`);
+  await window.loadURL(`http://127.0.0.1:8000/#/${route}`);
   await new Promise(resolve => setTimeout(resolve, 450));
   const metrics = await inspect(window, name);
   metrics.theme = await window.webContents.executeJavaScript(`(() => {
@@ -76,7 +76,7 @@ app.whenReady().then(async () => {
   window.webContents.on("console-message", (_, level, message) => {
     if (level >= 2) consoleErrors.push(message);
   });
-  await window.loadURL("http://127.0.0.1:5173/#/finance");
+  await window.loadURL("http://127.0.0.1:8000/#/finance");
   await new Promise(resolve => setTimeout(resolve, 500));
   results.today1280 = await inspect(window, "today-1280x820");
 

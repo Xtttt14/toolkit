@@ -5,9 +5,9 @@
   "description": "个人本地工具箱 - 饮水提醒 · 待办清单 · 番茄钟 · 记账助手",
   "main": "electron/main.js",
   "scripts": {
-    "dev": "vite --host 127.0.0.1 --configLoader runner",
+    "dev": "vite --host 127.0.0.1 --port 8000 --configLoader runner",
     "electron": "electron .",
-    "start": "concurrently -k \"npm run dev\" \"wait-on http://127.0.0.1:5173 && electron .\"",
+    "start": "concurrently -k \"npm run dev\" \"wait-on http://127.0.0.1:8000 && electron .\"",
     "test:async-state": "node scripts/verify-async-state-updates.cjs",
     "test:water-reminder": "node scripts/verify-water-reminder.cjs",
     "build": "vite build --configLoader runner",

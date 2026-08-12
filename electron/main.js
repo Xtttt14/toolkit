@@ -422,7 +422,7 @@ function getAssetPath(name) {
 
 function loadRendererRoute(window, route = "/") {
   if (isDev) {
-    return window.loadURL(`http://127.0.0.1:5173/#${route}`);
+    return window.loadURL(`http://127.0.0.1:8000/#${route}`);
   }
   return window.loadFile(path.join(__dirname, "../dist/index.html"), { hash: route });
 }
