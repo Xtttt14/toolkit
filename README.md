@@ -42,6 +42,7 @@
 - 今日记账、月历和统计报表三个页面
 - 支持周、月、年收支趋势及支出分类占比
 - 支持JSON备份与恢复
+- 提供“总计项目”页：为纸张、设备等长期开销建立累计项目，可直接新增记录或关联多笔每日账单；关联账单的修改和删除会自动同步
 
 ### 工具箱设置与桌面组件
 
@@ -96,14 +97,14 @@ npm run dist
 
 安装版会在启动后自动检查 GitHub Releases 中的新版本。发现更新后，可以在“工具箱设置 → 软件更新”中下载，并重启完成更新；本地业务数据不会被覆盖。
 
-交付约定：完成并验证小功能后，自动提交并推送至GitHub仓库，同时在本地构建安装包。仅在明确要求发布，或功能达到一个完整版本时，才更新`package.json`版本号、推送标签并发布Release。GitHub Actions会自动构建安装包、生成更新元数据并创建GitHub Release：
+交付约定：每次完成并验证改动后，自动提交并推送至GitHub仓库；提交说明必须概括本次改动项。每次创建安装包时，默认更新现有的`E:\toolkit\personal-toolbox`安装目录（安装向导仍允许改选其他目录）。仅在明确要求发布，或功能达到一个完整版本时，才更新`package.json`版本号、推送标签并发布Release。GitHub Actions会自动构建安装包、生成更新元数据并创建GitHub Release：
 
 ```powershell
 git tag v1.6.0
 git push origin v1.6.0
 ```
 
-本地安装包可通过`npm run dist`构建，结果位于`release/`目录。若需要单文件便携版，可继续运行`npm run dist:portable`；便携版不支持自动更新。
+本地安装包可通过`npm run dist`构建，结果位于`release/`目录；运行安装包时会默认更新`E:\toolkit\personal-toolbox`。若需要单文件便携版，可继续运行`npm run dist:portable`；便携版不支持自动更新。
 
 ## 数据存储
 
