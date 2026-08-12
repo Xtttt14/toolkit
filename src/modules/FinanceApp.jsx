@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, BarChart3, Calculator, CalendarDays, ReceiptText } from "lucide-react";
+import { ArrowLeft, BarChart3, Calculator, CalendarDays, FolderKanban, ReceiptText } from "lucide-react";
 import FinanceView from "./finance/FinanceView.jsx";
 
 const pages = [
   { id: "today", label: "今日记账", icon: ReceiptText },
   { id: "calendar", label: "日历", icon: CalendarDays },
+  { id: "total-projects", label: "总计项目", icon: FolderKanban },
   { id: "reports", label: "报表", icon: BarChart3 }
 ];
 

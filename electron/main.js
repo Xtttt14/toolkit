@@ -588,6 +588,36 @@ function normalizeFinanceTagSettings(settings = {}, customTags = {}) {
   }));
 }
 
+function normalizeTotalProjectRecord(record = {}) {
+  const now = new Date().toISOString();
+  return {
+    id: String(record.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`),
+    amount: Math.round(Math.abs(Number(record.amount) || 0) * 100) / 100,
+    note: String(record.note || "").trim().slice(0, 120),
+    date: /^\d{4}-\d{2}-\d{2}$/.test(String(record.date || "")) ? String(record.date) : null,
+    createdAt: record.createdAt || now,
+    updatedAt: record.updatedAt || now
+  };
+}
+
+function normalizeTotalProjects(projects = []) {
+  if (!Array.isArray(projects)) return [];
+  return projects.slice(0, 100).map((project, index) => {
+    const now = new Date().toISOString();
+    const linkedEntryIds = [...new Set((Array.isArray(project.linkedEntryIds) ? project.linkedEntryIds : [])
+      .map(id => String(id)).filter(Boolean))];
+    return {
+      id: String(project.id || `${Date.now()}-${index}-${Math.random().toString(16).slice(2)}`),
+      name: String(project.name || "未命名项目").trim().slice(0, 40) || "未命名项目",
+      linkedEntryIds,
+      records: (Array.isArray(project.records) ? project.records : [])
+        .map(normalizeTotalProjectRecord).filter(record => record.amount > 0),
+      createdAt: project.createdAt || now,
+      updatedAt: project.updatedAt || now
+    };
+  });
+}
+
 function getFinanceData() {
   const entries = financeStore.get("entries", [])
     .map(normalizeFinanceEntry)
@@ -595,7 +625,8 @@ function getFinanceData() {
     .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
   const customTags = normalizeFinanceTags(financeStore.get("customTags", {}));
   const tagSettings = normalizeFinanceTagSettings(financeStore.get("tagSettings", {}), customTags);
-  return { version: 2, entries, customTags, tagSettings };
+  const totalProjects = normalizeTotalProjects(financeStore.get("totalProjects", []));
+  return { version: 3, entries, customTags, tagSettings, totalProjects };
 }
 
 function saveFinanceData(data) {
@@ -606,6 +637,7 @@ function saveFinanceData(data) {
   if (data.tagSettings !== undefined) {
     financeStore.set("tagSettings", normalizeFinanceTagSettings(data.tagSettings, data.customTags ?? financeStore.get("customTags", {})));
   }
+  if (data.totalProjects !== undefined) financeStore.set("totalProjects", normalizeTotalProjects(data.totalProjects));
 }
 
 function broadcastFinance() {
@@ -1255,6 +1287,70 @@ ipcMain.handle("finance:delete", (_, id) => {
   broadcastFinance();
   return getFinanceData();
 });
+ipcMain.handle("finance:total-project-add", (_, project = {}) => {
+  const name = String(project.name || "").trim().slice(0, 40);
+  if (!name) throw new Error("项目名称不能为空");
+  const data = getFinanceData();
+  data.totalProjects.unshift(normalizeTotalProjects([{ ...project, name }])[0]);
+  saveFinanceData(data);
+  broadcastFinance();
+  return getFinanceData();
+});
+ipcMain.handle("finance:total-project-update", (_, { id, patch } = {}) => {
+  const data = getFinanceData();
+  const index = data.totalProjects.findIndex(project => project.id === String(id));
+  if (index === -1) return data;
+  const current = data.totalProjects[index];
+  const next = normalizeTotalProjects([{ ...current, ...(patch || {}), id: current.id, createdAt: current.createdAt, updatedAt: new Date().toISOString() }])[0];
+  if (!next.name) throw new Error("项目名称不能为空");
+  data.totalProjects[index] = next;
+  saveFinanceData(data);
+  broadcastFinance();
+  return getFinanceData();
+});
+ipcMain.handle("finance:total-project-delete", (_, id) => {
+  const data = getFinanceData();
+  data.totalProjects = data.totalProjects.filter(project => project.id !== String(id));
+  saveFinanceData(data);
+  broadcastFinance();
+  return getFinanceData();
+});
+ipcMain.handle("finance:total-record-add", (_, { projectId, record } = {}) => {
+  const data = getFinanceData();
+  const project = data.totalProjects.find(item => item.id === String(projectId));
+  if (!project) throw new Error("项目不存在");
+  const next = normalizeTotalProjectRecord(record);
+  if (next.amount <= 0) throw new Error("金额必须大于0");
+  project.records.unshift(next);
+  project.updatedAt = new Date().toISOString();
+  saveFinanceData(data);
+  broadcastFinance();
+  return getFinanceData();
+});
+ipcMain.handle("finance:total-record-update", (_, { projectId, recordId, patch } = {}) => {
+  const data = getFinanceData();
+  const project = data.totalProjects.find(item => item.id === String(projectId));
+  const index = project?.records.findIndex(record => record.id === String(recordId)) ?? -1;
+  if (index < 0) return data;
+  const current = project.records[index];
+  const next = normalizeTotalProjectRecord({ ...current, ...(patch || {}), id: current.id, createdAt: current.createdAt, updatedAt: new Date().toISOString() });
+  if (next.amount <= 0) throw new Error("金额必须大于0");
+  project.records[index] = next;
+  project.updatedAt = new Date().toISOString();
+  saveFinanceData(data);
+  broadcastFinance();
+  return getFinanceData();
+});
+ipcMain.handle("finance:total-record-delete", (_, { projectId, recordId } = {}) => {
+  const data = getFinanceData();
+  const project = data.totalProjects.find(item => item.id === String(projectId));
+  if (!project) return data;
+  project.records = project.records.filter(record => record.id !== String(recordId));
+  project.updatedAt = new Date().toISOString();
+  saveFinanceData(data);
+  broadcastFinance();
+  return getFinanceData();
+});
 ipcMain.handle("finance:tag-add", (_, { type, name }) => {
   const safeType = type === "income" ? "income" : "expense";
   const cleanName = String(name || "").trim().slice(0, 12);
@@ -1351,7 +1447,7 @@ ipcMain.handle("finance:import", async () => {
       cancelId: 0
     });
     if (confirmation.response !== 1) return { status: "canceled" };
-    saveFinanceData({ entries: parsed.entries, customTags: parsed.customTags });
+    saveFinanceData({ entries: parsed.entries, customTags: parsed.customTags, totalProjects: parsed.totalProjects || [] });
     broadcastFinance();
     return { status: "imported", count: getFinanceData().entries.length };
   } catch (error) {
