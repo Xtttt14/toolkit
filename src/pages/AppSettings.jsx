@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Check, CircleCheck, Download, Info, Keyboard, LayoutPanelTop, LogOut, RefreshCw, Settings, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Check, CircleCheck, Download, Info, Keyboard, LayoutPanelTop, LogOut, Power, RefreshCw, Settings, ShieldCheck } from "lucide-react";
 
 const fallbackSettings = {
   showClosePrompt: true,
   closeAction: "hide",
   mainWindowShortcut: "Control+Shift+X",
+  launchAtLogin: false,
   version: ""
 };
 
@@ -144,6 +145,18 @@ export default function AppSettings() {
             {saveError && <p className="app-setting-error" role="alert">{saveError}</p>}
           </div>
           <div className="settings-callout blue"><Keyboard size={17} /><span>快捷键若被其他程序占用，设置不会保存；请改选其他组合。</span></div>
+        </article>
+
+        <article className="app-settings-card">
+          <header>
+            <span className="settings-card-icon green"><Power size={20} /></span>
+            <div><span>STARTUP</span><h2>开机启动</h2></div>
+          </header>
+          <div className="app-setting-row">
+            <div><strong>Windows 登录后自动启动</strong><p>登录 Windows 后自动在后台启动工具箱，提醒会按设置继续运行。</p></div>
+            <SettingSwitch checked={settings.launchAtLogin} onChange={value => update({ launchAtLogin: value })} label="开机自动启动" />
+          </div>
+          <div className="settings-callout green"><ShieldCheck size={17} /><span>可随时关闭；该设置仅对当前 Windows 用户生效。</span></div>
         </article>
 
         <article className="app-settings-card app-update-card">

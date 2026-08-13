@@ -36,7 +36,8 @@ const defaultWaterSettings = {
 const defaultAppSettings = {
   showClosePrompt: true,
   closeAction: "hide",
-  mainWindowShortcut: "Control+Shift+X"
+  mainWindowShortcut: "Control+Shift+X",
+  launchAtLogin: false
 };
 const supportedMainWindowShortcuts = ["Control+Shift+X", "Control+Shift+Z", "Control+Alt+X", "Control+Alt+Z"];
 
@@ -114,7 +115,8 @@ function initStores() {
         properties: {
           showClosePrompt: { type: "boolean", default: true },
           closeAction: { type: "string", enum: ["hide", "quit"], default: "hide" },
-          mainWindowShortcut: { type: "string", enum: supportedMainWindowShortcuts, default: "Control+Shift+X" }
+          mainWindowShortcut: { type: "string", enum: supportedMainWindowShortcuts, default: "Control+Shift+X" },
+          launchAtLogin: { type: "boolean", default: false }
         }
       }
     }
@@ -248,7 +250,8 @@ function normalizeAppSettings(settings = {}) {
     closeAction: settings.closeAction === "quit" ? "quit" : "hide",
     mainWindowShortcut: supportedMainWindowShortcuts.includes(settings.mainWindowShortcut)
       ? settings.mainWindowShortcut
-      : defaultAppSettings.mainWindowShortcut
+      : defaultAppSettings.mainWindowShortcut,
+    launchAtLogin: Boolean(settings.launchAtLogin)
   };
 }
 
@@ -464,6 +467,9 @@ function applyAppSettings(patch = {}) {
   const current = getAppSettings();
   const next = normalizeAppSettings({ ...current, ...(patch || {}) });
   appStore.set("settings", next);
+  if (patch && Object.prototype.hasOwnProperty.call(patch, "launchAtLogin")) {
+    app.setLoginItemSettings({ openAtLogin: next.launchAtLogin, path: process.execPath });
+  }
   broadcastAppSettings();
   updateTray();
   return getAppSettings();
