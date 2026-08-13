@@ -11,7 +11,7 @@ function textOf(node) {
 }
 function tableRows(table) {
   return asArray(table?.["w:tr"]).map(row => asArray(row["w:tc"]).map(cell => ({
-    text: textOf(cell).replace(/\s+/g, " ").trim(), span: Number((asArray(cell?.["w:tcPr"])[0] || {})?.["w:gridSpan"]?.["@_w:val"] || 1), mergedStart: asArray(cell?.["w:tcPr"]).some(item => item?.["w:vMerge"]?.["@_w:val"] === "restart")
+    text: textOf(cell).replace(/\s+/g, " ").trim(), span: Number((asArray(cell?.["w:tcPr"])[0] || {})?.["w:gridSpan"]?.["@_w:val"] || 1), merge: asArray(cell?.["w:tcPr"]).some(item => item?.["w:vMerge"]?.["@_w:val"] === "restart") ? "restart" : (asArray(cell?.["w:tcPr"]).some(item => item?.["w:vMerge"] !== undefined) ? "continue" : "")
   })));
 }
 function documentTables(filePath) {
@@ -26,12 +26,12 @@ function parsePeriod(label) {
   const match = String(label).match(/第(\d+)节\s*(\d{1,2}:\d{2})~(\d{1,2}:\d{2})/);
   return match ? { period: Number(match[1]), startTime: match[2], endTime: match[3] } : null;
 }
-function parseCourse(text, weekday, periodInfo, mergedStart = false) {
+function parseCourse(text, weekday, periodInfo, rowSpan = 1) {
   const parts = text.split("/"); const first = parts.shift() || "";
   const week = first.match(/(\d+)-(\d+).*?(单周|双周|每周)/);
   if (!week || !parts[0]) return null;
   const ends = ["08:45","09:40","10:55","11:50","15:05","16:00","17:15","18:10","19:45","20:40","21:35"];
-  const endPeriod = mergedStart ? Math.min(11, periodInfo.period + 3) : periodInfo.period;
+  const endPeriod = Math.min(11, periodInfo.period + Math.max(1, rowSpan) - 1);
   return { id: `${weekday}-${periodInfo.period}-${text}`, weekday, ...periodInfo, endPeriod, endTime: mergedStart ? (ends[Math.min(ends.length - 1, endPeriod - 1)] || periodInfo.endTime) : periodInfo.endTime, startWeek: Number(week[1]), endWeek: Number(week[2]), pattern: week[3], name: parts[0].replace(/^本\([^)]*\)/, ""), teacher: parts[1] || "", location: parts[2] || "", raw: text };
 }
 function parseSchedule(filePath) {
@@ -39,7 +39,9 @@ function parseSchedule(filePath) {
   const weekdayOf = text => ({ "星期一": 1, "星期二": 2, "星期三": 3, "星期四": 4, "星期五": 5, "星期六": 6, "星期日": 0 }[text]);
   const weekdays = headers.map(cell => weekdayOf(cell.text)); const gridWeekdays = []; headers.forEach(cell => { for (let i = 0; i < cell.span; i++) gridWeekdays.push(weekdayOf(cell.text)); });
   const courses = [];
-  rows.slice(1).forEach(row => { const period = parsePeriod(row[0]?.text); if (!period) return; const complex = row.length > 8 || row.some(cell => cell.span > 1); let column = 1; row.slice(1).forEach((cell, index) => { const weekday = complex ? gridWeekdays[column] : weekdays[index + 1]; column += cell.span; if (weekday === undefined) return; const chunks = cell.text.split(/(?=\d+-\d+(?:每周|单周|双周)\/)/); chunks.map(chunk => parseCourse(chunk, weekday, period, cell.mergedStart)).filter(Boolean).forEach(course => courses.push(course)); }); });
+  const positioned = rows.map(row => { let column = 1; return row.slice(1).map((cell, index) => { const item = { ...cell, column, index }; column += cell.span; return item; }); });
+  rows.slice(1).forEach((row, rowIndex) => { const period = parsePeriod(row[0]?.text); if (!period) return; const complex = row.length > 8 || row.some(cell => cell.span > 1); positioned[rowIndex].forEach(cell => { const weekday = complex ? gridWeekdays[cell.column] : weekdays[cell.index + 1]; if (weekday === undefined) return; let rowSpan = 1; if (cell.merge === "restart") for (let next = rowIndex + 1; next < positioned.length; next++) { const continuation = positioned[next].find(item => item.column <= cell.column && item.column + item.span > cell.column && item.merge === "continue"); if (!continuation) break; rowSpan += 1; }
+    const chunks = cell.text.split(/(?=\d+-\d+(?:每周|单周|双周)\/)/); chunks.map(chunk => parseCourse(chunk, weekday, period, rowSpan)).filter(Boolean).forEach(course => courses.push(course)); }); });
   if (!courses.length) throw new Error("未在课表中识别到课程，请确认使用的是示例格式的文件");
   return courses;
 }
