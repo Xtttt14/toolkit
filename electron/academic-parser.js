@@ -32,7 +32,7 @@ function parseCourse(text, weekday, periodInfo, rowSpan = 1) {
   if (!week || !parts[0]) return null;
   const ends = ["08:45","09:40","10:55","11:50","15:05","16:00","17:15","18:10","19:45","20:40","21:35"];
   const endPeriod = Math.min(11, periodInfo.period + Math.max(1, rowSpan) - 1);
-  return { id: `${weekday}-${periodInfo.period}-${text}`, weekday, ...periodInfo, endPeriod, endTime: mergedStart ? (ends[Math.min(ends.length - 1, endPeriod - 1)] || periodInfo.endTime) : periodInfo.endTime, startWeek: Number(week[1]), endWeek: Number(week[2]), pattern: week[3], name: parts[0].replace(/^本\([^)]*\)/, ""), teacher: parts[1] || "", location: parts[2] || "", raw: text };
+  return { id: `${weekday}-${periodInfo.period}-${text}`, weekday, ...periodInfo, endPeriod, endTime: rowSpan > 1 ? (ends[Math.min(ends.length - 1, endPeriod - 1)] || periodInfo.endTime) : periodInfo.endTime, startWeek: Number(week[1]), endWeek: Number(week[2]), pattern: week[3], name: parts[0].replace(/^本\([^)]*\)/, ""), teacher: parts[1] || "", location: parts[2] || "", raw: text };
 }
 function parseSchedule(filePath) {
   const table = documentTables(filePath)[0]; const rows = tableRows(table); const headers = rows[0] || [];
