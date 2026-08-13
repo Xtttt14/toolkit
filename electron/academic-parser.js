@@ -41,7 +41,7 @@ function parseSchedule(filePath) {
   const courses = [];
   const positioned = rows.map(row => { let column = 1; return row.slice(1).map((cell, index) => { const item = { ...cell, column, index }; column += cell.span; return item; }); });
   rows.slice(1).forEach((row, rowIndex) => { const period = parsePeriod(row[0]?.text); if (!period) return; const tableRowIndex = rowIndex + 1; const complex = row.length > 8 || row.some(cell => cell.span > 1); positioned[tableRowIndex].forEach(cell => { const weekday = complex ? gridWeekdays[cell.column] : weekdays[cell.index + 1]; if (weekday === undefined) return; let rowSpan = 1; if (cell.merge === "restart") for (let next = tableRowIndex + 1; next < positioned.length; next++) { const continuation = positioned[next].find(item => item.column <= cell.column && item.column + item.span > cell.column && item.merge === "continue"); if (!continuation) break; rowSpan += 1; }
-    const chunks = cell.text.split(/(?=\d+-\d+(?:每周|单周|双周)\/)/); chunks.map(chunk => parseCourse(chunk, weekday, period, rowSpan)).filter(Boolean).forEach(course => courses.push(course)); }); });
+    const chunks = cell.text.split(/(?<!\d)(?=\d+-\d+(?:每周|单周|双周)\/)/); chunks.map(chunk => parseCourse(chunk, weekday, period, rowSpan)).filter(Boolean).forEach(course => courses.push(course)); }); });
   if (!courses.length) throw new Error("未在课表中识别到课程，请确认使用的是示例格式的文件");
   return courses;
 }
