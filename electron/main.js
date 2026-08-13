@@ -673,51 +673,53 @@ function broadcastFinance() {
   sendToAppWindows("finance:changed", getFinanceData());
 }
 
-// 飞书消息只会被转换为这五种受限动作，再复用主进程已有的数据存储逻辑执行。
-function executeFeishuAction({ action, payload }) {
-  if (action === "add_water") {
-    addDrink({ ml: payload.ml, source: "feishu" });
-    return;
-  }
-  if (action === "add_todo") {
-    const title = String(payload.title || "").trim();
-    if (!title) throw new Error("任务名称不能为空");
-    const data = getTodoData();
-    data.tasks.push(normalizeTodoTask({
-      title,
-      description: payload.description || "",
-      priority: payload.priority || "P3",
-      dueDate: payload.dueDate || null,
-      reminderMinutes: 30
-    }));
-    saveTodoData(data);
-    broadcastState();
-    return;
-  }
-  if (action === "add_expense" || action === "add_income") {
-    const entry = normalizeFinanceEntry({
-      type: action === "add_income" ? "income" : "expense",
-      amount: payload.amount,
-      tag: payload.tag || "其他",
-      note: payload.note || "",
-      date: payload.date || todayKey()
-    });
-    if (entry.amount <= 0) throw new Error("金额必须大于0");
-    const data = getFinanceData();
-    data.entries.push(entry);
-    saveFinanceData(data);
-    broadcastFinance();
-    return;
-  }
-  if (action === "add_total") {
-    const name = String(payload.name || "").trim().slice(0, 40);
-    if (!name) throw new Error("项目名称不能为空");
-    const data = getFinanceData();
-    data.totalProjects.unshift(normalizeTotalProjects([{ name }])[0]);
-    saveFinanceData(data);
-    broadcastFinance();
-    return;
-  }
+function feishuHistory() { return appStore.get("_feishuActionHistory", []); }
+function saveFeishuHistory(history) { appStore.set("_feishuActionHistory", history.slice(-100)); }
+function remember(action) { saveFeishuHistory([...feishuHistory(), action]); }
+function label(entity, item) {
+  if (entity === "todo") return `待办「${item.title}」${item.dueDate ? `（${item.dueDate.slice(0, 10)}）` : ""}`;
+  if (entity === "finance") return `${item.type === "income" ? "收入" : "支出"}${item.amount}元·${item.tag}${item.note ? `·${item.note}` : ""}（${item.date}）`;
+  if (entity === "total") return `总计「${item.name}」`;
+  return `饮水${item.ml}ml（${new Date(item.at).toLocaleString("zh-CN", { hour12: false })}）`;
+}
+function candidates(entity, query = {}) {
+  const includes = (value) => !query.text || String(value).toLowerCase().includes(String(query.text).toLowerCase());
+  if (entity === "todo") return getTodoData().tasks.filter(item => includes(`${item.title} ${item.description}`) && (!query.date || item.dueDate?.startsWith(query.date))).slice(0, 8).map(item => ({ entity, id: item.id, label: label(entity, item) }));
+  if (entity === "finance") return getFinanceData().entries.filter(item => includes(`${item.tag} ${item.note}`) && (query.amount == null || Number(item.amount) === Number(query.amount)) && (!query.date || item.date === query.date) && (!query.tag || item.tag === query.tag)).slice(0, 8).map(item => ({ entity, id: item.id, label: label(entity, item) }));
+  if (entity === "total") return getFinanceData().totalProjects.filter(item => includes(item.name)).slice(0, 8).map(item => ({ entity, id: item.id, label: label(entity, item) }));
+  if (entity === "water") return Object.entries(getAllDays()).flatMap(([date, day]) => day.entries.map(item => ({ ...item, date }))).filter(item => (!query.date || item.date === query.date) && (query.ml == null || Number(item.ml) === Number(query.ml))).slice(-8).reverse().map(item => ({ entity, id: item.id, date: item.date, label: label(entity, item) }));
+  return [];
+}
+function removeWater(id, date) { const day = getDay(date); const index = day.entries.findIndex(item => item.id === id); if (index < 0) throw new Error("饮水记录不存在"); const [item] = day.entries.splice(index, 1); setDay(date, day); clearWaterReminderState(); broadcastState(); return item; }
+function restore(entity, item, date) {
+  if (entity === "todo") { const data = getTodoData(); data.tasks.push(item); saveTodoData(data); broadcastState(); }
+  else if (entity === "finance") { const data = getFinanceData(); data.entries.push(item); saveFinanceData(data); broadcastFinance(); }
+  else if (entity === "total") { const data = getFinanceData(); data.totalProjects.push(item); saveFinanceData(data); broadcastFinance(); }
+  else { const day = getDay(date); day.entries.push(item); setDay(date, day); broadcastState(); }
+}
+function undoLast() {
+  const history = feishuHistory(); const last = history.pop(); if (!last) return "没有可撤回的飞书操作。";
+  if (last.kind === "add") applySelection({ entity: last.entity, id: last.id, date: last.date }, {}, "delete", false);
+  else if (last.kind === "delete") restore(last.entity, last.before, last.date);
+  else applySelection({ entity: last.entity, id: last.id, date: last.date }, last.before, "update", false);
+  saveFeishuHistory(history); return `已撤回：${last.label}`;
+}
+function applySelection(target, patch, operation, track = true) {
+  const { entity, id, date } = target;
+  if (entity === "todo") { const data = getTodoData(); const index = data.tasks.findIndex(item => item.id === id); if (index < 0) throw new Error("待办不存在"); const before = data.tasks[index]; if (operation === "delete") data.tasks.splice(index, 1); else data.tasks[index] = normalizeTodoTask({ ...before, ...patch, id, createdAt: before.createdAt, updatedAt: new Date().toISOString() }); saveTodoData(data); broadcastState(); const current = operation === "delete" ? before : data.tasks[index]; if (track) remember({ kind: operation === "delete" ? "delete" : "update", entity, id, before, label: label(entity, current) }); return `${operation === "delete" ? "已撤回" : "已修改"}${label(entity, current)}`; }
+  if (entity === "finance") { const data = getFinanceData(); const index = data.entries.findIndex(item => item.id === id); if (index < 0) throw new Error("账单不存在"); const before = data.entries[index]; if (operation === "delete") data.entries.splice(index, 1); else { const next = normalizeFinanceEntry({ ...before, ...patch, id, createdAt: before.createdAt, updatedAt: new Date().toISOString() }); if (next.amount <= 0) throw new Error("金额必须大于0"); data.entries[index] = next; } saveFinanceData(data); broadcastFinance(); const current = operation === "delete" ? before : data.entries[index]; if (track) remember({ kind: operation === "delete" ? "delete" : "update", entity, id, before, label: label(entity, current) }); return `${operation === "delete" ? "已撤回" : "已修改"}${label(entity, current)}`; }
+  if (entity === "total") { const data = getFinanceData(); const index = data.totalProjects.findIndex(item => item.id === id); if (index < 0) throw new Error("总计项目不存在"); const before = data.totalProjects[index]; if (operation === "delete") data.totalProjects.splice(index, 1); else data.totalProjects[index] = normalizeTotalProjects([{ ...before, ...patch, id, createdAt: before.createdAt, updatedAt: new Date().toISOString() }])[0]; saveFinanceData(data); broadcastFinance(); const current = operation === "delete" ? before : data.totalProjects[index]; if (track) remember({ kind: operation === "delete" ? "delete" : "update", entity, id, before, label: label(entity, current) }); return `${operation === "delete" ? "已撤回" : "已修改"}${label(entity, current)}`; }
+  const day = getDay(date); const index = day.entries.findIndex(item => item.id === id); if (index < 0) throw new Error("饮水记录不存在"); const before = day.entries[index]; if (operation === "delete") removeWater(id, date); else { day.entries[index] = { ...before, ml: Number(patch.ml || before.ml) }; if (!(day.entries[index].ml > 0)) throw new Error("饮水量必须大于0"); setDay(date, day); broadcastState(); } const current = operation === "delete" ? before : day.entries[index]; if (track) remember({ kind: operation === "delete" ? "delete" : "update", entity, id, date, before, label: label(entity, current) }); return `${operation === "delete" ? "已撤回" : "已修改"}${label(entity, current)}`;
+}
+function executeFeishuAction(plan) {
+  if (plan.kind === "undo_last") return { text: undoLast() };
+  if (plan.kind === "find") { const found = candidates(plan.entity, plan.query); return found.length ? { candidates: found } : { text: "没有找到匹配的记录。" }; }
+  if (plan.kind === "select") return { text: applySelection(plan.target, plan.patch, plan.operation) };
+  const { entity, patch } = plan;
+  if (entity === "water") { const state = addDrink({ ml: patch.ml, source: "feishu" }); const item = state.today.lastEntry; remember({ kind: "add", entity, id: item.id, date: state.date, label: label(entity, item) }); return { text: `已记录${label(entity, item)}` }; }
+  if (entity === "todo") { const title = String(patch.title || "").trim(); if (!title) throw new Error("任务名称不能为空"); const data = getTodoData(); const item = normalizeTodoTask({ title, description: patch.description || "", priority: patch.priority || "P3", dueDate: patch.dueDate || null, reminderMinutes: 30 }); data.tasks.push(item); saveTodoData(data); broadcastState(); remember({ kind: "add", entity, id: item.id, label: label(entity, item) }); return { text: `已新增${label(entity, item)}` }; }
+  if (entity === "finance") { const item = normalizeFinanceEntry({ type: patch.type === "income" ? "income" : "expense", amount: patch.amount, tag: patch.tag || "其他", note: patch.note || "", date: patch.date || todayKey() }); if (item.amount <= 0) throw new Error("金额必须大于0"); const data = getFinanceData(); data.entries.push(item); saveFinanceData(data); broadcastFinance(); remember({ kind: "add", entity, id: item.id, label: label(entity, item) }); return { text: `已新增${label(entity, item)}` }; }
+  if (entity === "total") { const name = String(patch.name || "").trim(); if (!name) throw new Error("项目名称不能为空"); const data = getFinanceData(); const item = normalizeTotalProjects([{ name }])[0]; data.totalProjects.unshift(item); saveFinanceData(data); broadcastFinance(); remember({ kind: "add", entity, id: item.id, label: label(entity, item) }); return { text: `已新增${label(entity, item)}` }; }
   throw new Error("不支持的飞书操作");
 }
 
@@ -1574,6 +1576,7 @@ app.whenReady().then(() => {
     appId: process.env.FEISHU_APP_ID,
     appSecret: process.env.FEISHU_APP_SECRET,
     allowedOpenId: process.env.FEISHU_ALLOWED_OPEN_ID,
+    deepSeekApiKey: process.env.DEEPSEEK_API_KEY,
     onAction: executeFeishuAction
   });
   updateTray();
