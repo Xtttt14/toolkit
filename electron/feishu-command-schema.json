@@ -8,17 +8,18 @@
     "payload": {
       "type": "object",
       "additionalProperties": false,
+      "required": ["title", "description", "dueDate", "priority", "amount", "tag", "note", "date", "name", "ml"],
       "properties": {
-        "title": { "type": "string" },
-        "description": { "type": "string" },
+        "title": { "type": ["string", "null"] },
+        "description": { "type": ["string", "null"] },
         "dueDate": { "type": ["string", "null"] },
-        "priority": { "type": "string", "enum": ["P0", "P1", "P2", "P3"] },
-        "amount": { "type": "number" },
-        "tag": { "type": "string" },
-        "note": { "type": "string" },
+        "priority": { "type": ["string", "null"], "enum": ["P0", "P1", "P2", "P3", null] },
+        "amount": { "type": ["number", "null"] },
+        "tag": { "type": ["string", "null"] },
+        "note": { "type": ["string", "null"] },
         "date": { "type": ["string", "null"] },
-        "name": { "type": "string" },
-        "ml": { "type": "number" }
+        "name": { "type": ["string", "null"] },
+        "ml": { "type": ["number", "null"] }
       }
     },
     "message": { "type": "string" }
