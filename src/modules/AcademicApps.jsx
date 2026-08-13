@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Bell, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, FileUp, MapPin } from "lucide-react";
 
@@ -7,7 +7,7 @@ const monday = date => { const d = new Date(date); d.setDate(d.getDate() - ((d.g
 const weekday = [[1,"一"],[2,"二"],[3,"三"],[4,"四"],[5,"五"],[6,"六"],[0,"日"]];
 function Shell({ title, children }) { const nav=useNavigate(); return <main className="academic-page"><header><button className="icon-button" onClick={()=>nav("/")}><ArrowLeft size={20}/></button><div><p>本地校园助手</p><h1>{title}</h1></div></header>{children}</main>; }
 function Reminder({ settings, onSave }) { return <label className="academic-reminder"><Bell size={17}/><input type="checkbox" checked={settings.enabled} onChange={e=>onSave({...settings,enabled:e.target.checked})}/><span>开启提醒</span><input type="number" min="0" value={settings.reminderMinutes} disabled={!settings.enabled} onChange={e=>onSave({...settings,reminderMinutes:e.target.value})}/><span>分钟前</span></label>; }
-function WeekPicker({ open, selectedWeek, maxWeek, onClose, onConfirm }) { const [draft,setDraft]=useState(selectedWeek); useEffect(()=>setDraft(selectedWeek),[selectedWeek,open]); if(!open)return null; return <section className="week-picker"><header><button onClick={onClose}>取消</button><strong>选择周次</strong><button onClick={()=>onConfirm(draft)}>确定</button></header><div className="week-picker-list">{Array.from({length:maxWeek},(_,index)=>index+1).map(item=><button key={item} className={item===draft?"active":""} onClick={()=>setDraft(item)}>第{item}周</button>)}</div></section>; }
+function WeekPicker({ open, selectedWeek, maxWeek, onClose, onConfirm }) { const [draft,setDraft]=useState(selectedWeek); const activeRef=useRef(null); useEffect(()=>{setDraft(selectedWeek); if(open) requestAnimationFrame(()=>activeRef.current?.scrollIntoView({ block:"center" }));},[selectedWeek,open]); if(!open)return null; return <section className="week-picker"><header><button onClick={onClose}>取消</button><strong>选择周次</strong><button onClick={()=>onConfirm(draft)}>确定</button></header><div className="week-picker-list">{Array.from({length:maxWeek},(_,index)=>index+1).map(item=><button ref={item===draft?activeRef:null} key={item} className={item===draft?"active":""} onClick={()=>setDraft(item)}>第{item}周</button>)}</div></section>; }
 export function ScheduleApp() {
   const [data,setData]=useState(null); const [day,setDay]=useState(new Date().getDay()); const [start,setStart]=useState(""); const [viewWeek,setViewWeek]=useState(null); const [pickerOpen,setPickerOpen]=useState(false);
   useEffect(()=>{window.academicApi.getSchedule().then(d=>{setData(d);setStart(d.startDate||"")});return window.academicApi.onScheduleChanged(setData)},[]);
