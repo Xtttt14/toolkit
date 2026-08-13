@@ -1,0 +1,26 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "action", "payload", "message"],
+  "properties": {
+    "status": { "type": "string", "enum": ["action", "clarify"] },
+    "action": { "type": ["string", "null"], "enum": ["add_todo", "add_expense", "add_income", "add_total", "add_water", null] },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "dueDate": { "type": ["string", "null"] },
+        "priority": { "type": "string", "enum": ["P0", "P1", "P2", "P3"] },
+        "amount": { "type": "number" },
+        "tag": { "type": "string" },
+        "note": { "type": "string" },
+        "date": { "type": ["string", "null"] },
+        "name": { "type": "string" },
+        "ml": { "type": "number" }
+      }
+    },
+    "message": { "type": "string" }
+  }
+}

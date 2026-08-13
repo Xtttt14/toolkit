@@ -1,10 +1,12 @@
 const { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, Notification, Tray, nativeImage } = require("electron");
 const path = require("path");
 const fs = require("fs");
+require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 const Store = require("electron-store");
 const { autoUpdater } = require("electron-updater");
 const { getWaterReminderDueAt, safeMinutes } = require("./water-reminder");
 const { parseSchedule, parseExams } = require("./academic-parser");
+const { startFeishuBridge } = require("./feishu-bridge");
 
 const isDev = !app.isPackaged;
 const waterReminderSessionStartedAt = new Date();
@@ -669,6 +671,54 @@ function saveFinanceData(data) {
 
 function broadcastFinance() {
   sendToAppWindows("finance:changed", getFinanceData());
+}
+
+// 飞书消息只会被转换为这五种受限动作，再复用主进程已有的数据存储逻辑执行。
+function executeFeishuAction({ action, payload }) {
+  if (action === "add_water") {
+    addDrink({ ml: payload.ml, source: "feishu" });
+    return;
+  }
+  if (action === "add_todo") {
+    const title = String(payload.title || "").trim();
+    if (!title) throw new Error("任务名称不能为空");
+    const data = getTodoData();
+    data.tasks.push(normalizeTodoTask({
+      title,
+      description: payload.description || "",
+      priority: payload.priority || "P3",
+      dueDate: payload.dueDate || null,
+      reminderMinutes: 30
+    }));
+    saveTodoData(data);
+    broadcastState();
+    return;
+  }
+  if (action === "add_expense" || action === "add_income") {
+    const entry = normalizeFinanceEntry({
+      type: action === "add_income" ? "income" : "expense",
+      amount: payload.amount,
+      tag: payload.tag || "其他",
+      note: payload.note || "",
+      date: payload.date || todayKey()
+    });
+    if (entry.amount <= 0) throw new Error("金额必须大于0");
+    const data = getFinanceData();
+    data.entries.push(entry);
+    saveFinanceData(data);
+    broadcastFinance();
+    return;
+  }
+  if (action === "add_total") {
+    const name = String(payload.name || "").trim().slice(0, 40);
+    if (!name) throw new Error("项目名称不能为空");
+    const data = getFinanceData();
+    data.totalProjects.unshift(normalizeTotalProjects([{ name }])[0]);
+    saveFinanceData(data);
+    broadcastFinance();
+    return;
+  }
+  throw new Error("不支持的飞书操作");
 }
 
 // ═══════ 番茄钟逻辑 ═══════
@@ -1520,6 +1570,12 @@ app.whenReady().then(() => {
     console.error("无法注册主窗口快捷键，可能已被其他程序占用。");
   }
   createWindow();
+  startFeishuBridge({
+    appId: process.env.FEISHU_APP_ID,
+    appSecret: process.env.FEISHU_APP_SECRET,
+    allowedOpenId: process.env.FEISHU_ALLOWED_OPEN_ID,
+    onAction: executeFeishuAction
+  });
   updateTray();
   startReminderLoop();
   configureAutoUpdater();
