@@ -111,3 +111,14 @@ contextBridge.exposeInMainWorld("financeApi", {
     return () => ipcRenderer.removeListener("finance:changed", listener);
   }
 });
+
+contextBridge.exposeInMainWorld("academicApi", {
+  getSchedule: () => ipcRenderer.invoke("academic:schedule-get"),
+  getExams: () => ipcRenderer.invoke("academic:exams-get"),
+  importSchedule: (startDate) => ipcRenderer.invoke("academic:schedule-import", startDate),
+  importExams: () => ipcRenderer.invoke("academic:exams-import"),
+  saveScheduleSettings: (settings) => ipcRenderer.invoke("academic:schedule-settings", settings || {}),
+  saveExamSettings: (settings) => ipcRenderer.invoke("academic:exam-settings", settings || {}),
+  onScheduleChanged: callback => { const listener = (_, data) => callback(data); ipcRenderer.on("academic:schedule-changed", listener); return () => ipcRenderer.removeListener("academic:schedule-changed", listener); },
+  onExamsChanged: callback => { const listener = (_, data) => callback(data); ipcRenderer.on("academic:exams-changed", listener); return () => ipcRenderer.removeListener("academic:exams-changed", listener); }
+});

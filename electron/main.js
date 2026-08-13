@@ -4,6 +4,7 @@ const fs = require("fs");
 const Store = require("electron-store");
 const { autoUpdater } = require("electron-updater");
 const { getWaterReminderDueAt, safeMinutes } = require("./water-reminder");
+const { parseSchedule, parseExams } = require("./academic-parser");
 
 const isDev = !app.isPackaged;
 const waterReminderSessionStartedAt = new Date();
@@ -72,10 +73,13 @@ let todoStore;
 let financeStore;
 let pomodoroStore;
 let appStore;
+let scheduleStore;
+let examsStore;
 let mainWindow;
 let tray;
 let reminderTimer;
 let todoReminderTimer;
+let academicReminderTimer;
 let waterStartupTimer;
 let todoStartupTimer;
 let pomodoroTimer;
@@ -162,6 +166,23 @@ function initStores() {
       settings: { type: "object", default: defaultPomodoroData.settings }
     }
   });
+  scheduleStore = new Store({ name: "schedule-data", defaults: { courses: [], startDate: null, settings: { enabled: false, reminderMinutes: 15 } } });
+  examsStore = new Store({ name: "exams-data", defaults: { exams: [], settings: { enabled: false, reminderMinutes: 30 } } });
+}
+
+function getScheduleData() { return { courses: scheduleStore.get("courses", []), startDate: scheduleStore.get("startDate", null), settings: { enabled: false, reminderMinutes: 15, ...(scheduleStore.get("settings", {}) || {}) } }; }
+function getExamsData() { return { exams: examsStore.get("exams", []), settings: { enabled: false, reminderMinutes: 30, ...(examsStore.get("settings", {}) || {}) } }; }
+function broadcastAcademic() { sendToAppWindows("academic:schedule-changed", getScheduleData()); sendToAppWindows("academic:exams-changed", getExamsData()); }
+function maybeAcademicNotify() {
+  const now = new Date(); const key = todayKey(now); const current = now.getHours() * 60 + now.getMinutes(); const sent = new Set(appStore.get("_academicNotified", []));
+  const schedule = getScheduleData();
+  if (schedule.settings.enabled && schedule.startDate) {
+    const start = new Date(`${schedule.startDate}T12:00:00`); const week = Math.floor((new Date(`${key}T12:00:00`) - start) / 604800000) + 1; const weekday = now.getDay();
+    schedule.courses.filter(c => c.weekday === weekday && week >= c.startWeek && week <= c.endWeek && (c.pattern === "每周" || (c.pattern === "单周" ? week % 2 : week % 2 === 0))).forEach(c => { const [h,m] = c.startTime.split(":").map(Number); const due = h * 60 + m - Number(schedule.settings.reminderMinutes || 0); const id = `course-${key}-${c.id}`; if (current >= due && current <= due + 1 && !sent.has(id)) { new Notification({ title: "即将上课", body: `${c.name} · ${c.startTime}${c.location ? ` · ${c.location}` : ""}` }).show(); sent.add(id); } });
+  }
+  const exams = getExamsData();
+  if (exams.settings.enabled) exams.exams.filter(e => e.date === key).forEach(e => { const time = (e.time.match(/\d{1,2}:\d{2}/) || [""])[0]; if (!time) return; const [h,m] = time.split(":").map(Number); const due = h * 60 + m - Number(exams.settings.reminderMinutes || 0); const id = `exam-${e.id}`; if (current >= due && current <= due + 1 && !sent.has(id)) { new Notification({ title: "即将考试", body: `${e.name} · ${e.time}${e.location ? ` · ${e.location}` : ""}` }).show(); sent.add(id); } });
+  appStore.set("_academicNotified", [...sent].filter(id => !id.includes(`-${key}-`) || sent.has(id)).slice(-500));
 }
 
 function normalizeStringList(value) {
@@ -879,6 +900,9 @@ function startReminderLoop() {
   todoReminderTimer = setInterval(maybeTodoNotify, 60 * 1000);
   clearTimeout(todoStartupTimer);
   todoStartupTimer = setTimeout(maybeTodoNotify, 5000);
+  clearInterval(academicReminderTimer);
+  academicReminderTimer = setInterval(maybeAcademicNotify, 60 * 1000);
+  setTimeout(maybeAcademicNotify, 6000);
   clearInterval(pomodoroTimer);
   pomodoroTimer = setInterval(maybeFinishPomodoro, 1000);
   maybeFinishPomodoro();
@@ -887,11 +911,13 @@ function startReminderLoop() {
 function stopBackgroundWork() {
   clearInterval(reminderTimer);
   clearInterval(todoReminderTimer);
+  clearInterval(academicReminderTimer);
   clearTimeout(waterStartupTimer);
   clearTimeout(todoStartupTimer);
   clearInterval(pomodoroTimer);
   reminderTimer = null;
   todoReminderTimer = null;
+  academicReminderTimer = null;
   waterStartupTimer = null;
   todoStartupTimer = null;
   pomodoroTimer = null;
@@ -1003,6 +1029,22 @@ ipcMain.handle("app:open-main", (_, route) => {
   navigateMainWindow(typeof route === "string" ? route : "/");
   return true;
 });
+
+ipcMain.handle("academic:schedule-get", () => getScheduleData());
+ipcMain.handle("academic:exams-get", () => getExamsData());
+ipcMain.handle("academic:schedule-import", async (_, startDate) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(startDate || ""))) throw new Error("请选择有效的开学日期");
+  const picked = await dialog.showOpenDialog(mainWindow, { title: "导入日常课表", properties: ["openFile"], filters: [{ name: "学校课表（DOC）", extensions: ["doc"] }] });
+  if (picked.canceled || !picked.filePaths[0]) return { status: "canceled" };
+  const courses = parseSchedule(picked.filePaths[0]); scheduleStore.set("courses", courses); scheduleStore.set("startDate", startDate); broadcastAcademic(); return { status: "imported", count: courses.length };
+});
+ipcMain.handle("academic:exams-import", async () => {
+  const picked = await dialog.showOpenDialog(mainWindow, { title: "导入考试信息", properties: ["openFile"], filters: [{ name: "学校考试表（DOC）", extensions: ["doc"] }] });
+  if (picked.canceled || !picked.filePaths[0]) return { status: "canceled" };
+  const exams = parseExams(picked.filePaths[0]); examsStore.set("exams", exams); broadcastAcademic(); return { status: "imported", count: exams.length };
+});
+ipcMain.handle("academic:schedule-settings", (_, settings = {}) => { scheduleStore.set("settings", { ...getScheduleData().settings, enabled: Boolean(settings.enabled), reminderMinutes: Math.max(0, Math.min(1440, Number(settings.reminderMinutes) || 0)) }); broadcastAcademic(); return getScheduleData(); });
+ipcMain.handle("academic:exam-settings", (_, settings = {}) => { examsStore.set("settings", { ...getExamsData().settings, enabled: Boolean(settings.enabled), reminderMinutes: Math.max(0, Math.min(10080, Number(settings.reminderMinutes) || 0)) }); broadcastAcademic(); return getExamsData(); });
 
 // ═══════ IPC 待办 ═══════
 ipcMain.handle("todo:getAll", () => getTodoData());
