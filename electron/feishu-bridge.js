@@ -130,6 +130,9 @@ function isReadOnlyQuestion(text) {
   const mutatesData = /(新增|添加|加一|修改|改成|删除|删掉|撤回|取消|关联|记入|支出|收入)/.test(value);
   return asksForInfo && !mutatesData;
 }
+function isCancellation(text) {
+  return /^\s*(取消|算了|不用了|停止|不(?:想|要)?(?:删|删除|操作)了?|我不想(?:删|删除|操作)了?)\s*[。！!]?\s*$/.test(String(text || ""));
+}
 
 function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, onAction, onChatContext, logger = console }) {
   if (!appId || !appSecret || !allowedOpenId || !deepSeekApiKey) {
@@ -175,6 +178,10 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
       const text = JSON.parse(data.message.content || "{}").text || "";
       const pending = pendingByUser.get(openId) || null;
       rememberConversation(openId, "user", text);
+      if (pending && isCancellation(text)) {
+        pendingByUser.delete(openId);
+        return void await reply(messageId, "已取消本次操作，未修改任何数据。", openId);
+      }
       if (pending?.kind === "confirm-delete") {
         if (/^\s*(确认删除|确认|确定|是)\s*$/.test(text)) {
           const result = await onAction(pending.action); pendingByUser.delete(openId);
@@ -283,4 +290,4 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
   return { started: true };
 }
 
-module.exports = { answerWithDeepSeek, applyExplicitDates, buildPlannerPrompt, chineseCount, extractExplicitDates, isReadOnlyQuestion, isRecentUndoRequest, parseLinkSelection, parseRecentTotalRecordDeletion, parseSingleSelection, parseTotalRecordDeletion, planWithDeepSeek, startFeishuBridge, validatePlan };
+module.exports = { answerWithDeepSeek, applyExplicitDates, buildPlannerPrompt, chineseCount, extractExplicitDates, isCancellation, isReadOnlyQuestion, isRecentUndoRequest, parseLinkSelection, parseRecentTotalRecordDeletion, parseSingleSelection, parseTotalRecordDeletion, planWithDeepSeek, startFeishuBridge, validatePlan };
