@@ -796,9 +796,55 @@ function totalRecordDeleteCandidates(query = {}) {
   });
   return found.filter(item => !text || normalizeTotalRecordSearchText(item.search).includes(text)).slice(0, 8).map(({ search, ...item }) => item);
 }
+function findWorkflowTotalProject(data, name) {
+  const query = String(name || "").trim().toLowerCase();
+  const exact = data.totalProjects.filter(project => project.name.toLowerCase() === query);
+  const matched = exact.length ? exact : data.totalProjects.filter(project => project.name.toLowerCase().includes(query));
+  if (!matched.length) throw new Error(`没有找到总计项目「${name}」`);
+  if (matched.length > 1) throw new Error(`找到多个匹配的总计项目「${name}」，请使用更完整的项目名称`);
+  return matched[0];
+}
+function executeFinanceWorkflow(plan) {
+  // 所有步骤先在内存副本上完成校验；任一步失败都不写入本地数据。
+  const data = getFinanceData(); const refs = {}; const messages = []; let lastFinance = null;
+  for (const step of plan.steps) {
+    const payload = step.data || {};
+    if (step.action === "finance.create") {
+      const dates = [...new Set((Array.isArray(payload.dates) ? payload.dates : [payload.date || todayKey()]).filter(date => /^\d{4}-\d{2}-\d{2}$/.test(String(date))))];
+      if (!dates.length) throw new Error("账单日期无效");
+      const entries = dates.map(date => normalizeFinanceEntry({ type: payload.type === "income" ? "income" : "expense", amount: payload.amount, tag: payload.tag || "其他", note: payload.note || "", date }));
+      if (entries.some(entry => entry.amount <= 0)) throw new Error("金额必须大于0");
+      data.entries.push(...entries); refs[step.id] = entries; lastFinance = entries.at(-1);
+      messages.push(...entries.map(entry => `已新增${label("finance", entry)}`));
+      continue;
+    }
+    if (step.action === "finance.link_to_total") {
+      const ref = String(payload.financeRef || ""); const source = ref.startsWith("$") ? refs[ref.slice(1)] : data.entries.filter(entry => entry.id === ref);
+      const entries = Array.isArray(source) ? source : source ? [source] : [];
+      if (!entries.length) throw new Error("关联步骤引用的账单不存在");
+      const project = findWorkflowTotalProject(data, payload.totalName);
+      project.linkedEntryIds = [...new Set([...project.linkedEntryIds, ...entries.map(entry => entry.id)])]; project.updatedAt = new Date().toISOString();
+      messages.push(`已将${entries.map(entry => label("finance", entry)).join("、")}关联到${label("total", project)}`);
+      continue;
+    }
+    if (step.action === "finance.update") {
+      const ref = String(payload.financeId || ""); const id = ref === "$last_finance" ? lastFinance?.id : ref;
+      const index = data.entries.findIndex(entry => entry.id === id);
+      if (index < 0) throw new Error("没有可修改的账单；请先创建账单或说明金额、日期、备注");
+      const current = data.entries[index]; const next = normalizeFinanceEntry({ ...current, ...(payload.patch || {}), id: current.id, createdAt: current.createdAt, updatedAt: new Date().toISOString() });
+      if (next.amount <= 0) throw new Error("金额必须大于0");
+      data.entries[index] = next; lastFinance = next; refs[step.id] = [next]; messages.push(`已修改${label("finance", next)}`);
+      continue;
+    }
+    throw new Error("工作流包含不支持的步骤");
+  }
+  saveFinanceData(data); broadcastFinance();
+  return { text: messages.join("\n"), references: lastFinance ? { lastFinance: { id: lastFinance.id, label: label("finance", lastFinance), expiresAt: Date.now() + 30 * 60 * 1000 } } : null };
+}
 function executeFeishuAction(plan) {
   if (plan.kind === "undo_last") return { text: undoLast() };
   if (plan.kind === "undo-last-preview") return undoPreview();
+  if (plan.kind === "workflow") return executeFinanceWorkflow(plan);
   if (plan.kind === "find") { const found = candidates(plan.entity, plan.query); return found.length ? { candidates: found } : { text: "没有找到匹配的记录。" }; }
   if (plan.kind === "link") {
     const finance = candidates("finance", plan.query); const total = candidates("total", plan.totalQuery);
@@ -906,7 +952,7 @@ function executeFeishuAction(plan) {
     if (items.some(item => item.amount <= 0)) throw new Error("金额必须大于0");
     const data = getFinanceData(); data.entries.push(...items); saveFinanceData(data); broadcastFinance();
     items.forEach(item => remember({ kind: "add", entity, id: item.id, label: label(entity, item) }));
-    return { text: items.map(item => `已新增${label(entity, item)}`).join("\n") };
+    return { text: items.map(item => `已新增${label(entity, item)}`).join("\n"), references: { lastFinance: { id: items.at(-1).id, label: label(entity, items.at(-1)), expiresAt: Date.now() + 30 * 60 * 1000 } } };
   }
   if (entity === "total") { const name = String(patch.name || "").trim(); if (!name) throw new Error("项目名称不能为空"); const data = getFinanceData(); const item = normalizeTotalProjects([{ name }])[0]; data.totalProjects.unshift(item); saveFinanceData(data); broadcastFinance(); remember({ kind: "add", entity, id: item.id, label: label(entity, item) }); return { text: `已新增${label(entity, item)}` }; }
   throw new Error("不支持的飞书操作");

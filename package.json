@@ -9,6 +9,7 @@
     "electron": "electron .",
     "start": "concurrently -k \"npm run dev\" \"wait-on http://127.0.0.1:8000 && electron .\"",
     "test:async-state": "node scripts/verify-async-state-updates.cjs",
+    "test:feishu-workflows": "node scripts/verify-feishu-finance-workflows.cjs",
     "test:water-reminder": "node scripts/verify-water-reminder.cjs",
     "build": "vite build --configLoader runner",
     "dist": "npm run build && electron-builder --win nsis --publish never",

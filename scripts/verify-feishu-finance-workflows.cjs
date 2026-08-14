@@ -1,0 +1,22 @@
+const assert = require("assert");
+const { applyExplicitDates, parseNaturalFinanceCommand, validatePlan } = require("../electron/feishu-bridge");
+
+const createAndLink = parseNaturalFinanceCommand("增加一笔记账，娱乐，59.9元，备注265张25cm生态纸+8张21cm棉箔纸，同时把这个账单关联到折纸总计项目中");
+assert.equal(createAndLink.kind, "workflow");
+assert.deepEqual(createAndLink.steps, [
+  { id: "created_bill", action: "finance.create", data: { type: "expense", amount: 59.9, tag: "娱乐", note: "265张25cm生态纸+8张21cm棉箔纸" } },
+  { id: "link_project", action: "finance.link_to_total", data: { financeRef: "$created_bill", totalName: "折纸" } }
+]);
+
+const explicitTag = parseNaturalFinanceCommand("增加一笔记账，59.9元，备注纸张，标签为娱乐");
+assert.equal(explicitTag.steps[0].data.tag, "娱乐");
+assert.equal(explicitTag.steps[0].data.note, "纸张");
+
+const updateRecent = parseNaturalFinanceCommand("修改这笔支出的标签为娱乐");
+assert.deepEqual(updateRecent.steps, [{ id: "update_bill", action: "finance.update", data: { financeId: "$last_finance", patch: { tag: "娱乐" } } }]);
+
+assert.equal(validatePlan(createAndLink).kind, "workflow");
+assert.throws(() => validatePlan({ kind: "workflow", steps: [{ action: "shell.execute", data: {} }] }));
+const dated = applyExplicitDates(parseNaturalFinanceCommand("8月15日增加一笔娱乐记账，59.9元"), "8月15日增加一笔娱乐记账，59.9元");
+assert.equal(dated.steps[0].data.date, "2026-08-15");
+console.log("飞书多步骤记账工作流检查通过。");

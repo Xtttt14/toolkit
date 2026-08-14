@@ -14,7 +14,9 @@ function extractExplicitDates(text, now = new Date()) {
 }
 function applyExplicitDates(plan, text) {
   const dates = extractExplicitDates(text);
-  if (!dates.length || !["add", "select", "add_total_record"].includes(plan.kind)) return plan;
+  if (!dates.length) return plan;
+  if (plan.kind === "workflow") return { ...plan, steps: plan.steps.map(step => step.action === "finance.create" ? { ...step, data: { ...step.data, date: dates[0], dates } } : step) };
+  if (!["add", "select", "add_total_record"].includes(plan.kind)) return plan;
   const patch = { ...plan.patch };
   if (plan.entity === "finance" || plan.kind === "select") { patch.date = dates[0]; if (plan.kind === "add") patch.dates = dates; }
   if (plan.kind === "add_total_record") patch.date = dates[0];
@@ -23,7 +25,8 @@ function applyExplicitDates(plan, text) {
 }
 function buildPlannerPrompt(text, pending, history) {
   return `你是个人工具箱的飞书命令解析器。只输出 JSON，不要 Markdown。
-允许的实体 entity：todo、finance、total、water。允许的 kind：add、add_total_record、undo_last、find、select、link、chat、clarify、cancel。
+允许的实体 entity：todo、finance、total、water。允许的 kind：add、workflow、add_total_record、undo_last、find、select、link、chat、clarify、cancel。
+当用户在同一句中要求多个有先后依赖的记账动作，必须返回 kind="workflow"，不得只执行其中一步。workflow 的 steps 为 1-6 个步骤，每步格式为 {"id":"可选标识","action":"finance.create|finance.link_to_total|finance.update","data":{}}。finance.create 的 data 为 type、amount、tag、note、date/dates；finance.link_to_total 的 data 为 financeRef（引用前面步骤时写 "$步骤id"）和 totalName；finance.update 的 data 为 financeId（用户指“这笔/刚创建的账单”时写 "$last_finance"）和 patch。workflow 中先创建账单、再关联总计时，必须输出 create 和 link_to_total 两步；绝不能在总计中新增独立记录替代关联。
 add 仅新增；add_total_record 用于在已有总计项目内新增独立金额记录，不关联每日账单，query 用于查找总计项目、patch 填 amount/note/date。用户提供项目名时，query.text 必须填写该名称；系统会在唯一匹配时直接执行，只在多个匹配时询问选择。undo_last 只能用于用户明确说“刚刚/最近/上一条（次）”的撤回。用户要删除总计项目内某一条具体记录（不是最近N条）时，必须返回 kind="find"、entity="total"、operation="delete"，query.text 填记录名称或备注；系统会列出总计明细供选择，绝不能删除整个总计项目。除饮水撤回外，任何删除操作都会由系统展示删除对象并二次确认；不得声称已删除，除非用户已确认。用户说“删除/撤回这个刚刚/最近/上一条新增的独立记录”时，必须返回 undo_last，绝不能返回 add_total_record；用户明确说“删除某总计项目中最近N次直接/独立添加的记录”时，必须删除该项目最近N条独立记录；find 用于查找后修改或撤回；select 用于用户在候选结果中选择后更新或撤回；link 用于把一笔账单关联到一个总计项目；chat 用于只读提问、总结和普通对话。
 返回格式：{"kind":"...","entity":"...或null","query":{},"totalQuery":{},"patch":{},"operation":"update或delete或null","selection":数字或null,"message":"..."}。
 当前本地日期是 ${dateKey(new Date())}。账单或总计独立记录金额缺失时 kind=clarify；待办标题、总计名称缺失时 kind=clarify。查询条件可用 title/name/text/amount/date/tag/note/ml。patch 仅填写用户明确要改的字段。日期必须使用 YYYY-MM-DD；若用户明确列出多个日期（如“13、14号”），新增账单的 patch.dates 必须包含每一天。总计独立记录只允许一个日期。
@@ -34,9 +37,14 @@ add 仅新增；add_total_record 用于在已有总计项目内新增独立金�
 }
 
 function validatePlan(plan) {
-  const kinds = new Set(["add", "add_and_link_finance", "update_recent_finance", "add_total_record", "undo_last", "find", "select", "link", "chat", "clarify", "cancel"]);
+  const kinds = new Set(["add", "workflow", "add_and_link_finance", "update_recent_finance", "add_total_record", "undo_last", "find", "select", "link", "chat", "clarify", "cancel"]);
   const entities = new Set(["todo", "finance", "total", "water"]);
   if (!plan || typeof plan !== "object" || !kinds.has(plan.kind)) throw new Error("DeepSeek 返回了无效命令");
+  if (plan.kind === "workflow") {
+    const actions = new Set(["finance.create", "finance.link_to_total", "finance.update"]);
+    if (!Array.isArray(plan.steps) || !plan.steps.length || plan.steps.length > 6 || plan.steps.some(step => !step || !actions.has(step.action) || typeof step.data !== "object")) throw new Error("DeepSeek 返回了无效工作流");
+    return { kind: "workflow", entity: null, steps: plan.steps.map((step, index) => ({ id: String(step.id || `step_${index + 1}`), action: step.action, data: step.data })) };
+  }
   if (plan.entity !== null && !entities.has(plan.entity)) throw new Error("DeepSeek 返回了不支持的实体");
   return {
     kind: plan.kind,
@@ -141,7 +149,7 @@ function parseNaturalFinanceCommand(text) {
   const recentReference = /(这笔|刚刚|刚才|上一笔|刚创建|新建的(?:每日)?账单)/.test(value);
   if (recentReference && (/(修改|改|更改|设置).{0,12}(?:标签|分类)/.test(value) || /(?:标签|分类).{0,12}(?:改为|改成|为|是)/.test(value))) {
     const tag = explicitTag?.[1]?.trim();
-    return tag ? { kind: "update_recent_finance", entity: "finance", patch: { tag } } : null;
+    return tag ? { kind: "workflow", entity: null, steps: [{ id: "update_bill", action: "finance.update", data: { financeId: "$last_finance", patch: { tag } } }] } : null;
   }
   if (!amount || !/(新增|增加|添加|记一笔|记账|支出|计入)/.test(value) || /(修改|改|删除|撤回)/.test(value)) return null;
   let tag = explicitTag?.[1]?.trim();
@@ -152,7 +160,9 @@ function parseNaturalFinanceCommand(text) {
   const note = value.match(/(?:备注|说明)\s*[：:]?\s*([\s\S]*?)(?=(?:[，,；;。\n]\s*)?(?:(?:同时|并且|并|再).{0,16})?关联(?:到|至|给)?.{0,30}(?:总计(?:项目)?|项目)|$)/)?.[1]?.replace(/[，,；;。]\s*(?:标签|分类).+$/, "").trim();
   const project = value.match(/关联(?:到|至|给)?\s*(?:[「“"])?(.+?)(?:[」”"])?(?:总计(?:项目)?|项目)(?:中|里)?/)?.[1]?.replace(/[的\s]+$/g, "").trim();
   const patch = { type: "expense", amount: Number(amount[1]), tag: tag || "其他", note: note || "" };
-  return project ? { kind: "add_and_link_finance", entity: "finance", totalQuery: { text: project }, patch } : { kind: "add", entity: "finance", patch };
+  const steps = [{ id: "created_bill", action: "finance.create", data: patch }];
+  if (project) steps.push({ id: "link_project", action: "finance.link_to_total", data: { financeRef: "$created_bill", totalName: project } });
+  return { kind: "workflow", entity: null, steps };
 }
 
 function parseTodoAddition(text) {
@@ -182,14 +192,16 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
   const pendingByUser = new Map();
   const conversationByUser = new Map();
   const presentedCandidatesByUser = new Map();
+  const referencesByUser = new Map();
   const runtimeLoaded = new Set();
   const loadRuntime = openId => {
     if (runtimeLoaded.has(openId)) return;
     runtimeLoaded.add(openId);
-    const presented = onRuntimeLoad?.(openId)?.presentedCandidates;
+    const runtime = onRuntimeLoad?.(openId) || {}; const presented = runtime.presentedCandidates;
     if (presented?.expiresAt > Date.now() && Array.isArray(presented.items)) presentedCandidatesByUser.set(openId, presented);
+    if (runtime.references?.lastFinance?.expiresAt > Date.now()) referencesByUser.set(openId, runtime.references);
   };
-  const saveRuntime = openId => onRuntimeSave?.(openId, { presentedCandidates: presentedCandidatesByUser.get(openId) || null });
+  const saveRuntime = openId => onRuntimeSave?.(openId, { presentedCandidates: presentedCandidatesByUser.get(openId) || null, references: referencesByUser.get(openId) || null });
   const rememberPresentedCandidates = (openId, items) => {
     loadRuntime(openId);
     presentedCandidatesByUser.set(openId, { items, expiresAt: Date.now() + 10 * 60 * 1000 });
@@ -200,6 +212,14 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
     const value = presentedCandidatesByUser.get(openId);
     if (!value || value.expiresAt < Date.now()) { presentedCandidatesByUser.delete(openId); saveRuntime(openId); return []; }
     return value.items;
+  };
+  const rememberReferences = (openId, references) => {
+    if (!references) return; loadRuntime(openId); referencesByUser.set(openId, references); saveRuntime(openId);
+  };
+  const bindWorkflowReferences = (plan, openId) => {
+    if (plan.kind !== "workflow") return plan;
+    const lastFinanceId = referencesByUser.get(openId)?.lastFinance?.id;
+    return { ...plan, steps: plan.steps.map(step => ({ ...step, data: { ...step.data, financeId: step.data?.financeId === "$last_finance" ? lastFinanceId : step.data?.financeId, financeRef: step.data?.financeRef === "$last_finance" ? lastFinanceId : step.data?.financeRef } })) };
   };
   const rememberConversation = (openId, role, text) => {
     if (!conversationByUser.has(openId)) conversationByUser.set(openId, (onConversationLoad?.(openId) || []).slice(-80));
@@ -237,8 +257,9 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
       const text = JSON.parse(data.message.content || "{}").text || "";
       const pending = pendingByUser.get(openId) || null;
       rememberConversation(openId, "user", text);
-      const plannerContext = { pending: pending?.summary || null, presented: presentedCandidates(openId).map((item, index) => ({ index: index + 1, label: item.label })) };
-      const plan = parseNaturalFinanceCommand(text) || await planWithDeepSeek(text, plannerContext, conversationByUser.get(openId)?.slice(-48), deepSeekApiKey);
+      const plannerContext = { pending: pending?.summary || null, presented: presentedCandidates(openId).map((item, index) => ({ index: index + 1, label: item.label })), references: referencesByUser.get(openId) || null };
+      const planned = applyExplicitDates(parseNaturalFinanceCommand(text) || await planWithDeepSeek(text, plannerContext, conversationByUser.get(openId)?.slice(-48), deepSeekApiKey), text);
+      const plan = bindWorkflowReferences(planned, openId);
       if (pending && (plan.kind === "cancel" || isCancellation(text))) {
         pendingByUser.delete(openId);
         return void await reply(messageId, "已取消本次操作，未修改任何数据。", openId);
@@ -336,6 +357,7 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
         return void await reply(messageId, result.text, openId);
       }
       const result = await onAction(plan);
+      rememberReferences(openId, result.references);
       if (result.linkCandidates) {
         const { finance, total } = result.linkCandidates;
         pendingByUser.set(openId, { kind: "link", finance, total, summary: { finance: finance.map((item, index) => ({ index: index + 1, label: item.label })), total: total.map((item, index) => ({ index: index + 1, label: item.label })) } });
