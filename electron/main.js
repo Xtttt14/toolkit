@@ -725,6 +725,12 @@ function undoLast() {
     const restored = last.records.filter(record => !project.records.some(item => item.id === record.id));
     project.records.unshift(...restored); project.updatedAt = new Date().toISOString(); saveFinanceData(data); broadcastFinance();
   }
+  else if (last.kind === "total-link-delete") {
+    const data = getFinanceData(); const project = data.totalProjects.find(item => item.id === last.projectId);
+    if (!project) throw new Error("总计项目不存在");
+    if (!project.linkedEntryIds.includes(last.entryId)) project.linkedEntryIds.push(last.entryId);
+    project.updatedAt = new Date().toISOString(); saveFinanceData(data); broadcastFinance();
+  }
   else if (last.kind === "add") applySelection({ entity: last.entity, id: last.id, date: last.date }, {}, "delete", false);
   else if (last.kind === "delete") restore(last.entity, last.before, last.date);
   else applySelection({ entity: last.entity, id: last.id, date: last.date }, last.before, "update", false);
@@ -747,6 +753,16 @@ function addTotalProjectRecord(projectId, rawRecord) {
   remember({ kind: "total-record-add", projectId: project.id, id: record.id, label: `${label("total", project)}中的独立记录${recordLabel}` });
   return { text: `已在${label("total", project)}新增独立记录${recordLabel}` };
 }
+function totalRecordDeleteCandidates(query = {}) {
+  const text = String(query.text || "").trim().toLowerCase();
+  const data = getFinanceData();
+  const found = data.totalProjects.flatMap(project => {
+    const direct = project.records.map(record => ({ kind: "direct", projectId: project.id, recordId: record.id, label: `${label("total", project)}·直接添加${record.amount}元${record.note ? `·${record.note}` : ""}${record.date ? `（${record.date}）` : ""}`, search: `${project.name} ${record.note}` }));
+    const linked = data.entries.filter(entry => project.linkedEntryIds.includes(entry.id)).map(entry => ({ kind: "linked", projectId: project.id, entryId: entry.id, label: `${label("total", project)}·关联账单${entry.amount}元·${entry.tag}${entry.note ? `·${entry.note}` : ""}（${entry.date}）`, search: `${project.name} ${entry.tag} ${entry.note}` }));
+    return [...direct, ...linked];
+  });
+  return found.filter(item => !text || item.search.toLowerCase().includes(text)).slice(0, 8).map(({ search, ...item }) => item);
+}
 function executeFeishuAction(plan) {
   if (plan.kind === "undo_last") return { text: undoLast() };
   if (plan.kind === "find") { const found = candidates(plan.entity, plan.query); return found.length ? { candidates: found } : { text: "没有找到匹配的记录。" }; }
@@ -760,6 +776,27 @@ function executeFeishuAction(plan) {
     if (!entry || !project) throw new Error("账单或总计项目不存在");
     if (!project.linkedEntryIds.includes(entry.id)) { project.linkedEntryIds.push(entry.id); project.updatedAt = new Date().toISOString(); saveFinanceData(data); broadcastFinance(); }
     return { text: `已将${label("finance", entry)}关联到${label("total", project)}` };
+  }
+  if (plan.kind === "find-total-record-delete") {
+    const candidates = totalRecordDeleteCandidates(plan.query);
+    return candidates.length ? { totalRecordDeleteCandidates: candidates } : { text: "没有找到匹配的总计明细，未执行删除。" };
+  }
+  if (plan.kind === "delete-total-record-select") {
+    const target = plan.target || {}; const data = getFinanceData(); const project = data.totalProjects.find(item => item.id === target.projectId);
+    if (!project) throw new Error("总计项目不存在");
+    if (target.kind === "direct") {
+      const index = project.records.findIndex(item => item.id === target.recordId); if (index < 0) throw new Error("总计独立记录不存在");
+      const [record] = project.records.splice(index, 1); project.updatedAt = new Date().toISOString(); saveFinanceData(data); broadcastFinance();
+      remember({ kind: "total-record-delete", projectId: project.id, records: [record], label: `${label("total", project)}中的独立记录${record.amount}元${record.note ? `·${record.note}` : ""}` });
+      return { text: `已删除${label("total", project)}中的直接记录${record.amount}元${record.note ? `·${record.note}` : ""}。` };
+    }
+    if (target.kind === "linked") {
+      const entry = data.entries.find(item => item.id === target.entryId); if (!entry || !project.linkedEntryIds.includes(entry.id)) throw new Error("关联账单不存在");
+      project.linkedEntryIds = project.linkedEntryIds.filter(id => id !== entry.id); project.updatedAt = new Date().toISOString(); saveFinanceData(data); broadcastFinance();
+      remember({ kind: "total-link-delete", projectId: project.id, entryId: entry.id, label: `${label("finance", entry)}与${label("total", project)}的关联` });
+      return { text: `已从${label("total", project)}移除关联账单${label("finance", entry)}，原账单未删除。` };
+    }
+    throw new Error("不支持的总计明细类型");
   }
   if (plan.kind === "add_total_record") {
     const total = candidates("total", plan.query);
