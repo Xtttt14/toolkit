@@ -59,7 +59,7 @@ async function answerWithDeepSeek(text, context, apiKey) {
       thinking: { type: "disabled" },
       max_tokens: 1000,
       messages: [
-        { role: "system", content: "你是个人工具箱的只读聊天助手。只根据提供的工具箱数据回答；数据不足时明确说明。不得建议或声称已修改数据。回答简洁、使用中文。\n\n工具箱数据：\n" + JSON.stringify(context) },
+        { role: "system", content: "你是个人工具箱的只读聊天助手。只根据提供的工具箱数据回答；数据不足时明确说明。不得建议或声称已修改数据。总计项目的 records 已合并直接添加和关联账单，source 字段表示来源，并已按日期和创建时间倒序排列。回答简洁、使用中文。\n\n工具箱数据：\n" + JSON.stringify(context) },
         { role: "user", content: String(text || "") }
       ]
     })

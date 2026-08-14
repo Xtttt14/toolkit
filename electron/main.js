@@ -804,12 +804,18 @@ function getFeishuChatContext() {
   const todo = getTodoData();
   const finance = getFinanceData();
   const water = getWaterState();
+  const totalProjects = finance.totalProjects.slice(0, 100).map(project => {
+    const directRecords = project.records.map(record => ({ amount: record.amount, note: record.note, date: record.date, createdAt: record.createdAt, source: "直接添加" }));
+    const linkedRecords = finance.entries.filter(entry => project.linkedEntryIds.includes(entry.id)).map(entry => ({ amount: entry.amount, note: entry.note, tag: entry.tag, date: entry.date, createdAt: entry.createdAt, source: "关联账单" }));
+    const records = [...directRecords, ...linkedRecords].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")) || String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+    return { name: project.name, records };
+  });
   return {
     generatedAt: new Date().toISOString(),
     todo: todo.tasks.slice(0, 100).map(item => ({ title: item.title, description: item.description, priority: item.priority, dueDate: item.dueDate, completed: item.completed, tags: item.tags })),
     finance: {
       entries: finance.entries.slice(0, 100).map(item => ({ type: item.type, amount: item.amount, tag: item.tag, note: item.note, date: item.date })),
-      totalProjects: finance.totalProjects.slice(0, 100).map(item => ({ name: item.name, records: item.records.map(record => ({ amount: record.amount, note: record.note, date: record.date })) }))
+      totalProjects
     },
     water: {
       date: water.date,
