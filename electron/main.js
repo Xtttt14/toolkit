@@ -728,6 +728,17 @@ function applySelection(target, patch, operation, track = true) {
 function executeFeishuAction(plan) {
   if (plan.kind === "undo_last") return { text: undoLast() };
   if (plan.kind === "find") { const found = candidates(plan.entity, plan.query); return found.length ? { candidates: found } : { text: "没有找到匹配的记录。" }; }
+  if (plan.kind === "link") {
+    const finance = candidates("finance", plan.query); const total = candidates("total", plan.totalQuery);
+    if (!finance.length || !total.length) return { text: !finance.length ? "没有找到要关联的账单。" : "没有找到要关联的总计项目。" };
+    return { linkCandidates: { finance, total } };
+  }
+  if (plan.kind === "link-select") {
+    const data = getFinanceData(); const entry = data.entries.find(item => item.id === plan.financeId); const project = data.totalProjects.find(item => item.id === plan.totalId);
+    if (!entry || !project) throw new Error("账单或总计项目不存在");
+    if (!project.linkedEntryIds.includes(entry.id)) { project.linkedEntryIds.push(entry.id); project.updatedAt = new Date().toISOString(); saveFinanceData(data); broadcastFinance(); }
+    return { text: `已将${label("finance", entry)}关联到${label("total", project)}` };
+  }
   if (plan.kind === "select") return { text: applySelection(plan.target, plan.patch, plan.operation) };
   const { entity, patch } = plan;
   if (entity === "water") { const state = addDrink({ ml: patch.ml, source: "feishu" }); const item = state.today.lastEntry; remember({ kind: "add", entity, id: item.id, date: state.date, label: label(entity, item) }); return { text: `已记录${label(entity, item)}` }; }
