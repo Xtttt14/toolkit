@@ -736,6 +736,11 @@ function undoLast() {
   else applySelection({ entity: last.entity, id: last.id, date: last.date }, last.before, "update", false);
   saveFeishuHistory(history); return `已撤回：${last.label}`;
 }
+function undoPreview() {
+  const last = feishuHistory().at(-1); if (!last) return { text: "没有可撤回的飞书操作。" };
+  const deletesData = (last.kind === "add" && last.entity !== "water") || last.kind === "total-record-add";
+  return { undoPreview: { requiresConfirmation: deletesData, label: last.label, text: deletesData ? `将撤回并删除：${last.label}` : `将撤回：${last.label}` } };
+}
 function applySelection(target, patch, operation, track = true) {
   const { entity, id, date } = target;
   if (entity === "todo") { const data = getTodoData(); const index = data.tasks.findIndex(item => item.id === id); if (index < 0) throw new Error("待办不存在"); const before = data.tasks[index]; if (operation === "delete") data.tasks.splice(index, 1); else data.tasks[index] = normalizeTodoTask({ ...before, ...patch, id, createdAt: before.createdAt, updatedAt: new Date().toISOString() }); saveTodoData(data); broadcastState(); const current = operation === "delete" ? before : data.tasks[index]; if (track) remember({ kind: operation === "delete" ? "delete" : "update", entity, id, before, label: label(entity, current) }); return `${operation === "delete" ? "已撤回" : "已修改"}${label(entity, current)}`; }
@@ -768,6 +773,7 @@ function totalRecordDeleteCandidates(query = {}) {
 }
 function executeFeishuAction(plan) {
   if (plan.kind === "undo_last") return { text: undoLast() };
+  if (plan.kind === "undo-last-preview") return undoPreview();
   if (plan.kind === "find") { const found = candidates(plan.entity, plan.query); return found.length ? { candidates: found } : { text: "没有找到匹配的记录。" }; }
   if (plan.kind === "link") {
     const finance = candidates("finance", plan.query); const total = candidates("total", plan.totalQuery);
@@ -822,6 +828,15 @@ function executeFeishuAction(plan) {
     const records = project.records.splice(0, count); project.updatedAt = new Date().toISOString(); saveFinanceData(data); broadcastFinance();
     remember({ kind: "total-record-delete", projectId: project.id, records, label: `${label("total", project)}中的${count}条独立记录` });
     return { text: `已删除${label("total", project)}中最近${count}条独立记录。` };
+  }
+  if (plan.kind === "preview-delete-recent-total-records") {
+    const total = candidates("total", plan.query);
+    if (!total.length) return { text: "没有找到要删除独立记录的总计项目。" };
+    if (total.length > 1) return { text: "找到多个匹配的总计项目，请提供更完整的项目名称后重试。" };
+    const project = getFinanceData().totalProjects.find(item => item.id === total[0].id);
+    const count = Math.max(1, Math.min(50, Math.floor(Number(plan.count) || 1)));
+    if (!project || project.records.length < count) return { text: `总计项目「${project?.name || total[0].label}」只有${project?.records.length || 0}条独立记录，未执行删除。` };
+    return { deletePreview: { text: `将删除${label("total", project)}中最近${count}条直接添加的记录。`, action: { kind: "delete-recent-total-records", query: plan.query, count } } };
   }
   if (plan.kind === "select") return { text: applySelection(plan.target, plan.patch, plan.operation) };
   const { entity, patch } = plan;
