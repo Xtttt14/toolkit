@@ -841,9 +841,21 @@ function executeFinanceWorkflow(plan) {
   saveFinanceData(data); broadcastFinance();
   return { text: messages.join("\n"), references: lastFinance ? { lastFinance: { id: lastFinance.id, label: label("finance", lastFinance), expiresAt: Date.now() + 30 * 60 * 1000 } } : null };
 }
+function financeMonthlySummary(month) {
+  const data = getFinanceData(); const prefix = /^\d{4}-\d{2}$/.test(String(month || "")) ? month : todayKey().slice(0, 7);
+  const entries = data.entries.filter(entry => entry.type === "expense" && entry.date.startsWith(prefix));
+  const total = entries.reduce((sum, entry) => sum + entry.amount, 0);
+  const byTag = entries.reduce((map, entry) => map.set(entry.tag, (map.get(entry.tag) || 0) + entry.amount), new Map());
+  const title = `${Number(prefix.slice(5))}月`;
+  const lines = [`本月（${title}）支出合计：¥${total.toFixed(2)}。`];
+  if (byTag.size) lines.push("分类如下：", ...[...byTag.entries()].sort((a, b) => b[1] - a[1]).map(([tag, amount]) => `- ${tag}：¥${amount.toFixed(2)}`));
+  else lines.push("本月暂无支出记录。");
+  return { text: lines.join("\n") };
+}
 function executeFeishuAction(plan) {
   if (plan.kind === "undo_last") return { text: undoLast() };
   if (plan.kind === "undo-last-preview") return undoPreview();
+  if (plan.kind === "finance_summary") return financeMonthlySummary(plan.query?.month);
   if (plan.kind === "workflow") return executeFinanceWorkflow(plan);
   if (plan.kind === "find") { const found = candidates(plan.entity, plan.query); return found.length ? { candidates: found } : { text: "没有找到匹配的记录。" }; }
   if (plan.kind === "link") {

@@ -25,7 +25,7 @@ function applyExplicitDates(plan, text) {
 }
 function buildPlannerPrompt(text, pending, history) {
   return `你是个人工具箱的飞书命令解析器。只输出 JSON，不要 Markdown。
-允许的实体 entity：todo、finance、total、water。允许的 kind：add、workflow、add_total_record、undo_last、find、select、link、chat、clarify、cancel。
+允许的实体 entity：todo、finance、total、water。允许的 kind：add、workflow、finance_summary、add_total_record、undo_last、find、select、link、chat、clarify、cancel。
 当用户在同一句中要求多个有先后依赖的记账动作，必须返回 kind="workflow"，不得只执行其中一步。workflow 的 steps 为 1-6 个步骤，每步格式为 {"id":"可选标识","action":"finance.create|finance.link_to_total|finance.update","data":{}}。finance.create 的 data 为 type、amount、tag、note、date/dates；finance.link_to_total 的 data 为 financeRef（引用前面步骤时写 "$步骤id"）和 totalName；finance.update 的 data 为 financeId（用户指“这笔/刚创建的账单”时写 "$last_finance"）和 patch。workflow 中先创建账单、再关联总计时，必须输出 create 和 link_to_total 两步；绝不能在总计中新增独立记录替代关联。
 add 仅新增；add_total_record 用于在已有总计项目内新增独立金额记录，不关联每日账单，query 用于查找总计项目、patch 填 amount/note/date。用户提供项目名时，query.text 必须填写该名称；系统会在唯一匹配时直接执行，只在多个匹配时询问选择。undo_last 只能用于用户明确说“刚刚/最近/上一条（次）”的撤回。用户要删除总计项目内某一条具体记录（不是最近N条）时，必须返回 kind="find"、entity="total"、operation="delete"，query.text 填记录名称或备注；系统会列出总计明细供选择，绝不能删除整个总计项目。除饮水撤回外，任何删除操作都会由系统展示删除对象并二次确认；不得声称已删除，除非用户已确认。用户说“删除/撤回这个刚刚/最近/上一条新增的独立记录”时，必须返回 undo_last，绝不能返回 add_total_record；用户明确说“删除某总计项目中最近N次直接/独立添加的记录”时，必须删除该项目最近N条独立记录；find 用于查找后修改或撤回；select 用于用户在候选结果中选择后更新或撤回；link 用于把一笔账单关联到一个总计项目；chat 用于只读提问、总结和普通对话。
 返回格式：{"kind":"...","entity":"...或null","query":{},"totalQuery":{},"patch":{},"operation":"update或delete或null","selection":数字或null,"message":"..."}。
@@ -37,7 +37,7 @@ add 仅新增；add_total_record 用于在已有总计项目内新增独立金�
 }
 
 function validatePlan(plan) {
-  const kinds = new Set(["add", "workflow", "add_and_link_finance", "update_recent_finance", "add_total_record", "undo_last", "find", "select", "link", "chat", "clarify", "cancel"]);
+  const kinds = new Set(["add", "workflow", "finance_summary", "add_and_link_finance", "update_recent_finance", "add_total_record", "undo_last", "find", "select", "link", "chat", "clarify", "cancel"]);
   const entities = new Set(["todo", "finance", "total", "water"]);
   if (!plan || typeof plan !== "object" || !kinds.has(plan.kind)) throw new Error("DeepSeek 返回了无效命令");
   if (plan.kind === "workflow") {
@@ -165,6 +165,16 @@ function parseNaturalFinanceCommand(text) {
   return { kind: "workflow", entity: null, steps };
 }
 
+function parseNaturalFinanceSummary(text, now = new Date()) {
+  const value = String(text || "").trim();
+  if (!/(花了多少|支出(?:多少|合计|统计)|(?:本月|这个月|这月).*(?:花|支出)|(?:花费|消费).*(?:多少|合计))/.test(value)) return null;
+  const month = value.match(/(\d{1,2})月/)?.[1];
+  const year = value.match(/(\d{4})年/)?.[1] || now.getFullYear();
+  const numericMonth = month ? Number(month) : now.getMonth() + 1;
+  if (numericMonth < 1 || numericMonth > 12) return null;
+  return { kind: "finance_summary", entity: "finance", query: { month: `${year}-${String(numericMonth).padStart(2, "0")}` } };
+}
+
 function parseNaturalWaterCommand(text) {
   const value = String(text || "").trim();
   // 饮水是独立领域动作，必须在记账/模型规划前路由，不能把“杯”误解释为金额或分类。
@@ -266,7 +276,7 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
       const pending = pendingByUser.get(openId) || null;
       rememberConversation(openId, "user", text);
       const plannerContext = { pending: pending?.summary || null, presented: presentedCandidates(openId).map((item, index) => ({ index: index + 1, label: item.label })), references: referencesByUser.get(openId) || null };
-      const planned = applyExplicitDates(parseNaturalWaterCommand(text) || parseTodoAddition(text) || parseNaturalFinanceCommand(text) || await planWithDeepSeek(text, plannerContext, conversationByUser.get(openId)?.slice(-48), deepSeekApiKey), text);
+      const planned = applyExplicitDates(parseNaturalFinanceSummary(text) || parseNaturalWaterCommand(text) || parseTodoAddition(text) || parseNaturalFinanceCommand(text) || await planWithDeepSeek(text, plannerContext, conversationByUser.get(openId)?.slice(-48), deepSeekApiKey), text);
       const plan = bindWorkflowReferences(planned, openId);
       if (pending && (plan.kind === "cancel" || isCancellation(text))) {
         pendingByUser.delete(openId);
@@ -400,4 +410,4 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
   return { started: true };
 }
 
-module.exports = { answerWithDeepSeek, applyExplicitDates, buildPlannerPrompt, chineseCount, extractExplicitDates, isCancellation, isReadOnlyQuestion, isRecentUndoRequest, parseLinkSelection, parseListedRecordDeletion, parseNaturalFinanceCommand, parseNaturalWaterCommand, parseRecentTotalRecordDeletion, parseSingleSelection, parseTodoAddition, parseTotalRecordDeletion, parseTotalRecordListRequest, planWithDeepSeek, startFeishuBridge, validatePlan };
+module.exports = { answerWithDeepSeek, applyExplicitDates, buildPlannerPrompt, chineseCount, extractExplicitDates, isCancellation, isReadOnlyQuestion, isRecentUndoRequest, parseLinkSelection, parseListedRecordDeletion, parseNaturalFinanceCommand, parseNaturalFinanceSummary, parseNaturalWaterCommand, parseRecentTotalRecordDeletion, parseSingleSelection, parseTodoAddition, parseTotalRecordDeletion, parseTotalRecordListRequest, planWithDeepSeek, startFeishuBridge, validatePlan };

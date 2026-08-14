@@ -1,5 +1,5 @@
 const assert = require("assert");
-const { applyExplicitDates, parseNaturalFinanceCommand, parseNaturalWaterCommand, parseTodoAddition, validatePlan } = require("../electron/feishu-bridge");
+const { applyExplicitDates, parseNaturalFinanceCommand, parseNaturalFinanceSummary, parseNaturalWaterCommand, parseTodoAddition, validatePlan } = require("../electron/feishu-bridge");
 
 const createAndLink = parseNaturalFinanceCommand("增加一笔记账，娱乐，59.9元，备注265张25cm生态纸+8张21cm棉箔纸，同时把这个账单关联到折纸总计项目中");
 assert.equal(createAndLink.kind, "workflow");
@@ -23,4 +23,6 @@ assert.deepEqual(parseNaturalWaterCommand("加一杯水"), { kind: "add", entity
 assert.deepEqual(parseNaturalWaterCommand("喝了300ml水"), { kind: "add", entity: "water", patch: { ml: 300 } });
 assert.equal(parseNaturalWaterCommand("增加一笔娱乐记账，59.9元"), null);
 assert.deepEqual(parseTodoAddition("加一个待办，简单意图评估创建"), { kind: "add", entity: "todo", patch: { title: "简单意图评估创建" } });
+assert.deepEqual(parseNaturalFinanceSummary("这个月花了多少", new Date("2026-08-14T12:00:00")), { kind: "finance_summary", entity: "finance", query: { month: "2026-08" } });
+assert.deepEqual(parseNaturalFinanceSummary("2026年7月支出合计", new Date("2026-08-14T12:00:00")), { kind: "finance_summary", entity: "finance", query: { month: "2026-07" } });
 console.log("飞书多步骤记账工作流检查通过。");
