@@ -1,7 +1,7 @@
 const { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, Notification, Tray, nativeImage } = require("electron");
 const path = require("path");
 const fs = require("fs");
-require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
+const dotenv = require("dotenv");
 const Store = require("electron-store");
 const { autoUpdater } = require("electron-updater");
 const { getWaterReminderDueAt, safeMinutes } = require("./water-reminder");
@@ -14,6 +14,20 @@ const userDataPath = process.env.PERSONAL_TOOLBOX_USER_DATA
   || path.join(app.getPath("appData"), "personal-toolbox");
 app.setPath("userData", userDataPath);
 app.setName("个人工具箱");
+
+function loadBridgeEnvironment() {
+  const installedConfig = path.join(userDataPath, ".env");
+  // 开发版继续兼容项目根目录的 .env；安装版只读取用户数据目录，避免凭据进入安装包。
+  const paths = [installedConfig];
+  if (isDev) paths.push(path.join(__dirname, "..", ".env"));
+  paths.forEach(envPath => dotenv.config({ path: envPath, override: false, quiet: true }));
+  const examplePath = path.join(userDataPath, "feishu-bridge.env.example");
+  if (!fs.existsSync(installedConfig) && !fs.existsSync(examplePath)) {
+    fs.writeFileSync(examplePath, "FEISHU_APP_ID=\nFEISHU_APP_SECRET=\nFEISHU_ALLOWED_OPEN_ID=\nDEEPSEEK_API_KEY=\n", "utf8");
+  }
+}
+
+loadBridgeEnvironment();
 
 // ─── 饮水提醒 默认设置 ───
 const defaultWaterSettings = {

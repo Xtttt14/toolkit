@@ -97,6 +97,25 @@ npm run dist
 
 安装版会在启动后自动检查 GitHub Releases 中的新版本。发现更新后，可以在“工具箱设置 → 软件更新”中下载，并重启完成更新；本地业务数据不会被覆盖。
 
+### 飞书机器人（安装版）
+
+安装版启动后，会从用户数据目录读取飞书和 DeepSeek 凭据。先完全退出工具箱，在以下目录新建 `.env`：
+
+```text
+%APPDATA%\personal-toolbox\.env
+```
+
+填写（不要提交或分享此文件）：
+
+```env
+FEISHU_APP_ID=你的飞书App_ID
+FEISHU_APP_SECRET=你的飞书App_Secret
+FEISHU_ALLOWED_OPEN_ID=你的飞书open_id
+DEEPSEEK_API_KEY=你的DeepSeek_API_Key
+```
+
+重新打开已安装的工具箱后，只要应用仍在运行或隐藏在托盘中，手机私聊机器人即可正常工作。首次启动且尚未配置时，应用会在同一目录生成 `feishu-bridge.env.example` 作为模板；请复制为 `.env` 后填写。
+
 交付约定：每次完成并验证改动后，自动提交并推送至GitHub仓库；提交说明必须概括本次改动项。每次创建安装包时，默认更新现有的`E:\toolkit\personal-toolbox`安装目录（安装向导仍允许改选其他目录）。仅在明确要求发布，或功能达到一个完整版本时，才更新`package.json`版本号、推送标签并发布Release。GitHub Actions会自动构建安装包、生成更新元数据并创建GitHub Release：
 
 ```powershell
