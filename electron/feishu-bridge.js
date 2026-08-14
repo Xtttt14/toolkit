@@ -34,7 +34,7 @@ add 仅新增；add_total_record 用于在已有总计项目内新增独立金�
 }
 
 function validatePlan(plan) {
-  const kinds = new Set(["add", "add_total_record", "undo_last", "find", "select", "link", "chat", "clarify", "cancel"]);
+  const kinds = new Set(["add", "add_and_link_finance", "update_recent_finance", "add_total_record", "undo_last", "find", "select", "link", "chat", "clarify", "cancel"]);
   const entities = new Set(["todo", "finance", "total", "water"]);
   if (!plan || typeof plan !== "object" || !kinds.has(plan.kind)) throw new Error("DeepSeek 返回了无效命令");
   if (plan.entity !== null && !entities.has(plan.entity)) throw new Error("DeepSeek 返回了不支持的实体");
@@ -134,6 +134,27 @@ function parseListedRecordDeletion(text) {
   const match = value.match(/(?:删除|删掉)\s*(?:[^\d]*?(?:中|里))?\s*(?:第\s*)?(\d+)\s*(?:[.、．]|条|个)/);
   return match ? Number(match[1]) : null;
 }
+function parseNaturalFinanceCommand(text) {
+  const value = String(text || "").trim();
+  const amount = value.match(/(?:人民币|¥)?\s*(\d+(?:\.\d{1,2})?)\s*(?:元|块)/);
+  const explicitTag = value.match(/(?:标签|分类)\s*(?:为|是|改为|改成)?\s*[：:]?\s*([^，,；;。\n]+)/);
+  const recentReference = /(这笔|刚刚|刚才|上一笔|刚创建|新建的(?:每日)?账单)/.test(value);
+  if (recentReference && (/(修改|改|更改|设置).{0,12}(?:标签|分类)/.test(value) || /(?:标签|分类).{0,12}(?:改为|改成|为|是)/.test(value))) {
+    const tag = explicitTag?.[1]?.trim();
+    return tag ? { kind: "update_recent_finance", entity: "finance", patch: { tag } } : null;
+  }
+  if (!amount || !/(新增|增加|添加|记一笔|记账|支出|计入)/.test(value) || /(修改|改|删除|撤回)/.test(value)) return null;
+  let tag = explicitTag?.[1]?.trim();
+  if (!tag) tag = value.match(/(?:记账|账单)\s*[,，]\s*([^,，;；\s]+)\s*[,，]\s*\d/)?.[1];
+  if (!tag) tag = value.match(/(?:新增|增加|添加)\s*(?:一笔)?\s*([^，,；;。\s]{1,12})\s*(?:支出)?记账/)?.[1];
+  if (tag === "一笔") tag = "";
+  if (!tag) tag = ["三餐", "零食", "衣服", "交通", "旅行", "孩子", "宠物", "话费网费", "烟酒", "学习", "日用品", "住房", "美妆", "医疗", "发红包", "汽车/加油", "娱乐", "请客送礼", "电器数码", "运动", "水电煤"].find(item => value.includes(item));
+  const note = value.match(/(?:备注|说明)\s*[：:]?\s*([\s\S]*?)(?=(?:[，,；;。\n]\s*)?(?:(?:同时|并且|并|再).{0,16})?关联(?:到|至|给)?.{0,30}(?:总计(?:项目)?|项目)|$)/)?.[1]?.replace(/[，,；;。]\s*(?:标签|分类).+$/, "").trim();
+  const project = value.match(/关联(?:到|至|给)?\s*(?:[「“"])?(.+?)(?:[」”"])?(?:总计(?:项目)?|项目)(?:中|里)?/)?.[1]?.replace(/[的\s]+$/g, "").trim();
+  const patch = { type: "expense", amount: Number(amount[1]), tag: tag || "其他", note: note || "" };
+  return project ? { kind: "add_and_link_finance", entity: "finance", totalQuery: { text: project }, patch } : { kind: "add", entity: "finance", patch };
+}
+
 function parseTodoAddition(text) {
   const match = String(text || "").match(/^\s*(?:新增|增加|添加|加)(?:一个|一条)?待办(?:事项|任务)?\s*(?:[，,：:]\s*)?(.*)$/);
   if (!match) return null;
@@ -217,7 +238,7 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
       const pending = pendingByUser.get(openId) || null;
       rememberConversation(openId, "user", text);
       const plannerContext = { pending: pending?.summary || null, presented: presentedCandidates(openId).map((item, index) => ({ index: index + 1, label: item.label })) };
-      const plan = await planWithDeepSeek(text, plannerContext, conversationByUser.get(openId)?.slice(-48), deepSeekApiKey);
+      const plan = parseNaturalFinanceCommand(text) || await planWithDeepSeek(text, plannerContext, conversationByUser.get(openId)?.slice(-48), deepSeekApiKey);
       if (pending && (plan.kind === "cancel" || isCancellation(text))) {
         pendingByUser.delete(openId);
         return void await reply(messageId, "已取消本次操作，未修改任何数据。", openId);
@@ -349,4 +370,4 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
   return { started: true };
 }
 
-module.exports = { answerWithDeepSeek, applyExplicitDates, buildPlannerPrompt, chineseCount, extractExplicitDates, isCancellation, isReadOnlyQuestion, isRecentUndoRequest, parseLinkSelection, parseListedRecordDeletion, parseRecentTotalRecordDeletion, parseSingleSelection, parseTodoAddition, parseTotalRecordDeletion, parseTotalRecordListRequest, planWithDeepSeek, startFeishuBridge, validatePlan };
+module.exports = { answerWithDeepSeek, applyExplicitDates, buildPlannerPrompt, chineseCount, extractExplicitDates, isCancellation, isReadOnlyQuestion, isRecentUndoRequest, parseLinkSelection, parseListedRecordDeletion, parseNaturalFinanceCommand, parseRecentTotalRecordDeletion, parseSingleSelection, parseTodoAddition, parseTotalRecordDeletion, parseTotalRecordListRequest, planWithDeepSeek, startFeishuBridge, validatePlan };

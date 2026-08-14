@@ -750,6 +750,12 @@ function undoLast() {
     if (!project.linkedEntryIds.includes(last.entryId)) project.linkedEntryIds.push(last.entryId);
     project.updatedAt = new Date().toISOString(); saveFinanceData(data); broadcastFinance();
   }
+  else if (last.kind === "add-linked-finance") {
+    const data = getFinanceData(); const project = data.totalProjects.find(item => item.id === last.projectId);
+    if (project) project.linkedEntryIds = project.linkedEntryIds.filter(id => !last.entryIds.includes(id));
+    data.entries = data.entries.filter(item => !last.entryIds.includes(item.id));
+    saveFinanceData(data); broadcastFinance();
+  }
   else if (last.kind === "add") applySelection({ entity: last.entity, id: last.id, date: last.date }, {}, "delete", false);
   else if (last.kind === "delete") restore(last.entity, last.before, last.date);
   else applySelection({ entity: last.entity, id: last.id, date: last.date }, last.before, "update", false);
@@ -804,6 +810,27 @@ function executeFeishuAction(plan) {
     if (!entry || !project) throw new Error("账单或总计项目不存在");
     if (!project.linkedEntryIds.includes(entry.id)) { project.linkedEntryIds.push(entry.id); project.updatedAt = new Date().toISOString(); saveFinanceData(data); broadcastFinance(); }
     return { text: `已将${label("finance", entry)}关联到${label("total", project)}` };
+  }
+  if (plan.kind === "update_recent_finance") {
+    const latest = [...feishuHistory()].reverse().find(item => (item.kind === "add" && item.entity === "finance") || item.kind === "add-linked-finance");
+    const id = latest?.id || latest?.entryIds?.at(-1);
+    if (!id) return { text: "没有找到可修改的最近账单。请说明账单金额、日期或备注。" };
+    return { text: applySelection({ entity: "finance", id }, plan.patch || {}, "update") };
+  }
+  if (plan.kind === "add_and_link_finance") {
+    const total = candidates("total", plan.totalQuery);
+    if (!total.length) return { text: `没有找到总计项目「${plan.totalQuery?.text || ""}」，未创建账单。` };
+    if (total.length > 1) return { text: `找到多个匹配的总计项目「${plan.totalQuery?.text || ""}」，未创建账单。请使用更完整的项目名称。` };
+    const dates = [...new Set((Array.isArray(plan.patch?.dates) ? plan.patch.dates : [plan.patch?.date || todayKey()]).filter(date => /^\d{4}-\d{2}-\d{2}$/.test(String(date))))];
+    if (!dates.length) throw new Error("账单日期无效");
+    const items = dates.map(date => normalizeFinanceEntry({ type: plan.patch?.type === "income" ? "income" : "expense", amount: plan.patch?.amount, tag: plan.patch?.tag || "其他", note: plan.patch?.note || "", date }));
+    if (items.some(item => item.amount <= 0)) throw new Error("金额必须大于0");
+    const data = getFinanceData(); const project = data.totalProjects.find(item => item.id === total[0].id);
+    data.entries.push(...items);
+    project.linkedEntryIds = [...new Set([...project.linkedEntryIds, ...items.map(item => item.id)])];
+    project.updatedAt = new Date().toISOString(); saveFinanceData(data); broadcastFinance();
+    remember({ kind: "add-linked-finance", projectId: project.id, entryIds: items.map(item => item.id), label: `${items.map(item => label("finance", item)).join("、")}与${label("total", project)}的关联` });
+    return { text: `${items.map(item => `已新增${label("finance", item)}`).join("\n")}\n已关联到${label("total", project)}。` };
   }
   if (plan.kind === "find-total-record-delete") {
     const candidates = totalRecordDeleteCandidates(plan.query);
