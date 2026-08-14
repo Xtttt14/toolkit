@@ -732,7 +732,15 @@ function executeFeishuAction(plan) {
   const { entity, patch } = plan;
   if (entity === "water") { const state = addDrink({ ml: patch.ml, source: "feishu" }); const item = state.today.lastEntry; remember({ kind: "add", entity, id: item.id, date: state.date, label: label(entity, item) }); return { text: `已记录${label(entity, item)}` }; }
   if (entity === "todo") { const title = String(patch.title || "").trim(); if (!title) throw new Error("任务名称不能为空"); const data = getTodoData(); const item = normalizeTodoTask({ title, description: patch.description || "", priority: patch.priority || "P3", dueDate: patch.dueDate || null, reminderMinutes: 30 }); data.tasks.push(item); saveTodoData(data); broadcastState(); remember({ kind: "add", entity, id: item.id, label: label(entity, item) }); return { text: `已新增${label(entity, item)}` }; }
-  if (entity === "finance") { const item = normalizeFinanceEntry({ type: patch.type === "income" ? "income" : "expense", amount: patch.amount, tag: patch.tag || "其他", note: patch.note || "", date: patch.date || todayKey() }); if (item.amount <= 0) throw new Error("金额必须大于0"); const data = getFinanceData(); data.entries.push(item); saveFinanceData(data); broadcastFinance(); remember({ kind: "add", entity, id: item.id, label: label(entity, item) }); return { text: `已新增${label(entity, item)}` }; }
+  if (entity === "finance") {
+    const dates = [...new Set((Array.isArray(patch.dates) ? patch.dates : [patch.date || todayKey()]).filter(date => /^\d{4}-\d{2}-\d{2}$/.test(String(date))))];
+    if (!dates.length) throw new Error("账单日期无效");
+    const items = dates.map(date => normalizeFinanceEntry({ type: patch.type === "income" ? "income" : "expense", amount: patch.amount, tag: patch.tag || "其他", note: patch.note || "", date }));
+    if (items.some(item => item.amount <= 0)) throw new Error("金额必须大于0");
+    const data = getFinanceData(); data.entries.push(...items); saveFinanceData(data); broadcastFinance();
+    items.forEach(item => remember({ kind: "add", entity, id: item.id, label: label(entity, item) }));
+    return { text: items.map(item => `已新增${label(entity, item)}`).join("\n") };
+  }
   if (entity === "total") { const name = String(patch.name || "").trim(); if (!name) throw new Error("项目名称不能为空"); const data = getFinanceData(); const item = normalizeTotalProjects([{ name }])[0]; data.totalProjects.unshift(item); saveFinanceData(data); broadcastFinance(); remember({ kind: "add", entity, id: item.id, label: label(entity, item) }); return { text: `已新增${label(entity, item)}` }; }
   throw new Error("不支持的飞书操作");
 }
