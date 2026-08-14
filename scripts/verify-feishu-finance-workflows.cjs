@@ -1,5 +1,5 @@
 const assert = require("assert");
-const { applyExplicitDates, parseNaturalFinanceCommand, parseNaturalWaterCommand, validatePlan } = require("../electron/feishu-bridge");
+const { applyExplicitDates, parseNaturalFinanceCommand, parseNaturalWaterCommand, parseTodoAddition, validatePlan } = require("../electron/feishu-bridge");
 
 const createAndLink = parseNaturalFinanceCommand("增加一笔记账，娱乐，59.9元，备注265张25cm生态纸+8张21cm棉箔纸，同时把这个账单关联到折纸总计项目中");
 assert.equal(createAndLink.kind, "workflow");
@@ -22,4 +22,5 @@ assert.equal(dated.steps[0].data.date, "2026-08-15");
 assert.deepEqual(parseNaturalWaterCommand("加一杯水"), { kind: "add", entity: "water", patch: {} });
 assert.deepEqual(parseNaturalWaterCommand("喝了300ml水"), { kind: "add", entity: "water", patch: { ml: 300 } });
 assert.equal(parseNaturalWaterCommand("增加一笔娱乐记账，59.9元"), null);
+assert.deepEqual(parseTodoAddition("加一个待办，简单意图评估创建"), { kind: "add", entity: "todo", patch: { title: "简单意图评估创建" } });
 console.log("飞书多步骤记账工作流检查通过。");

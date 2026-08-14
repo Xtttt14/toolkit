@@ -266,7 +266,7 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
       const pending = pendingByUser.get(openId) || null;
       rememberConversation(openId, "user", text);
       const plannerContext = { pending: pending?.summary || null, presented: presentedCandidates(openId).map((item, index) => ({ index: index + 1, label: item.label })), references: referencesByUser.get(openId) || null };
-      const planned = applyExplicitDates(parseNaturalWaterCommand(text) || parseNaturalFinanceCommand(text) || await planWithDeepSeek(text, plannerContext, conversationByUser.get(openId)?.slice(-48), deepSeekApiKey), text);
+      const planned = applyExplicitDates(parseNaturalWaterCommand(text) || parseTodoAddition(text) || parseNaturalFinanceCommand(text) || await planWithDeepSeek(text, plannerContext, conversationByUser.get(openId)?.slice(-48), deepSeekApiKey), text);
       const plan = bindWorkflowReferences(planned, openId);
       if (pending && (plan.kind === "cancel" || isCancellation(text))) {
         pendingByUser.delete(openId);
