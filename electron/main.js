@@ -753,15 +753,18 @@ function addTotalProjectRecord(projectId, rawRecord) {
   remember({ kind: "total-record-add", projectId: project.id, id: record.id, label: `${label("total", project)}中的独立记录${recordLabel}` });
   return { text: `已在${label("total", project)}新增独立记录${recordLabel}` };
 }
+function normalizeTotalRecordSearchText(value) {
+  return String(value || "").toLowerCase().replace(/用于/g, "").replace(/购买/g, "买").replace(/[\s·，,。()（）]/g, "");
+}
 function totalRecordDeleteCandidates(query = {}) {
-  const text = String(query.text || "").trim().toLowerCase();
+  const text = normalizeTotalRecordSearchText(query.text);
   const data = getFinanceData();
   const found = data.totalProjects.flatMap(project => {
     const direct = project.records.map(record => ({ kind: "direct", projectId: project.id, recordId: record.id, label: `${label("total", project)}·直接添加${record.amount}元${record.note ? `·${record.note}` : ""}${record.date ? `（${record.date}）` : ""}`, search: `${project.name} ${record.note}` }));
     const linked = data.entries.filter(entry => project.linkedEntryIds.includes(entry.id)).map(entry => ({ kind: "linked", projectId: project.id, entryId: entry.id, label: `${label("total", project)}·关联账单${entry.amount}元·${entry.tag}${entry.note ? `·${entry.note}` : ""}（${entry.date}）`, search: `${project.name} ${entry.tag} ${entry.note}` }));
     return [...direct, ...linked];
   });
-  return found.filter(item => !text || item.search.toLowerCase().includes(text)).slice(0, 8).map(({ search, ...item }) => item);
+  return found.filter(item => !text || normalizeTotalRecordSearchText(item.search).includes(text)).slice(0, 8).map(({ search, ...item }) => item);
 }
 function executeFeishuAction(plan) {
   if (plan.kind === "undo_last") return { text: undoLast() };
