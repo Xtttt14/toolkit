@@ -165,6 +165,14 @@ function parseNaturalFinanceCommand(text) {
   return { kind: "workflow", entity: null, steps };
 }
 
+function parseNaturalWaterCommand(text) {
+  const value = String(text || "").trim();
+  // 饮水是独立领域动作，必须在记账/模型规划前路由，不能把“杯”误解释为金额或分类。
+  if (!/(?:加|喝|饮|记录).{0,8}(?:杯|瓶|毫升|ml)?\s*水|水\s*(?:一|两|\d+)?\s*(?:杯|瓶)/i.test(value)) return null;
+  const ml = value.match(/(\d{2,4})\s*(?:毫升|ml)/i)?.[1];
+  return { kind: "add", entity: "water", patch: ml ? { ml: Number(ml) } : {} };
+}
+
 function parseTodoAddition(text) {
   const match = String(text || "").match(/^\s*(?:新增|增加|添加|加)(?:一个|一条)?待办(?:事项|任务)?\s*(?:[，,：:]\s*)?(.*)$/);
   if (!match) return null;
@@ -258,7 +266,7 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
       const pending = pendingByUser.get(openId) || null;
       rememberConversation(openId, "user", text);
       const plannerContext = { pending: pending?.summary || null, presented: presentedCandidates(openId).map((item, index) => ({ index: index + 1, label: item.label })), references: referencesByUser.get(openId) || null };
-      const planned = applyExplicitDates(parseNaturalFinanceCommand(text) || await planWithDeepSeek(text, plannerContext, conversationByUser.get(openId)?.slice(-48), deepSeekApiKey), text);
+      const planned = applyExplicitDates(parseNaturalWaterCommand(text) || parseNaturalFinanceCommand(text) || await planWithDeepSeek(text, plannerContext, conversationByUser.get(openId)?.slice(-48), deepSeekApiKey), text);
       const plan = bindWorkflowReferences(planned, openId);
       if (pending && (plan.kind === "cancel" || isCancellation(text))) {
         pendingByUser.delete(openId);
@@ -392,4 +400,4 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
   return { started: true };
 }
 
-module.exports = { answerWithDeepSeek, applyExplicitDates, buildPlannerPrompt, chineseCount, extractExplicitDates, isCancellation, isReadOnlyQuestion, isRecentUndoRequest, parseLinkSelection, parseListedRecordDeletion, parseNaturalFinanceCommand, parseRecentTotalRecordDeletion, parseSingleSelection, parseTodoAddition, parseTotalRecordDeletion, parseTotalRecordListRequest, planWithDeepSeek, startFeishuBridge, validatePlan };
+module.exports = { answerWithDeepSeek, applyExplicitDates, buildPlannerPrompt, chineseCount, extractExplicitDates, isCancellation, isReadOnlyQuestion, isRecentUndoRequest, parseLinkSelection, parseListedRecordDeletion, parseNaturalFinanceCommand, parseNaturalWaterCommand, parseRecentTotalRecordDeletion, parseSingleSelection, parseTodoAddition, parseTotalRecordDeletion, parseTotalRecordListRequest, planWithDeepSeek, startFeishuBridge, validatePlan };
