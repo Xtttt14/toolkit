@@ -134,6 +134,12 @@ function parseListedRecordDeletion(text) {
   const match = value.match(/(?:删除|删掉)\s*(?:[^\d]*?(?:中|里))?\s*(?:第\s*)?(\d+)\s*(?:[.、．]|条|个)/);
   return match ? Number(match[1]) : null;
 }
+function parseTodoAddition(text) {
+  const match = String(text || "").match(/^\s*(?:新增|增加|添加|加)(?:一个|一条)?待办(?:事项|任务)?\s*(?:[，,：:]\s*)?(.*)$/);
+  if (!match) return null;
+  const title = match[1].replace(/^标题\s*(?:为|是|[:：])?\s*/, "").trim();
+  return title ? { kind: "add", entity: "todo", patch: { title } } : null;
+}
 function isReadOnlyQuestion(text) {
   const value = String(text || "").trim();
   const asksForInfo = /(什么|哪些|多少|几条|查询|查看|列出|统计|情况|吗|？|\?)/.test(value);
@@ -247,6 +253,11 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
       if (!pending && isRecentUndoRequest(text)) {
         return void await requestUndo(messageId, openId);
       }
+      const todoAddition = !pending && parseTodoAddition(text);
+      if (todoAddition) {
+        const result = await onAction(todoAddition);
+        return void await reply(messageId, result.text, openId);
+      }
       if (isReadOnlyQuestion(text)) {
         pendingByUser.delete(openId);
         return void await reply(messageId, await answerWithDeepSeek(text, onChatContext?.() || {}, deepSeekApiKey), openId);
@@ -326,4 +337,4 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
   return { started: true };
 }
 
-module.exports = { answerWithDeepSeek, applyExplicitDates, buildPlannerPrompt, chineseCount, extractExplicitDates, isCancellation, isReadOnlyQuestion, isRecentUndoRequest, parseLinkSelection, parseListedRecordDeletion, parseRecentTotalRecordDeletion, parseSingleSelection, parseTotalRecordDeletion, parseTotalRecordListRequest, planWithDeepSeek, startFeishuBridge, validatePlan };
+module.exports = { answerWithDeepSeek, applyExplicitDates, buildPlannerPrompt, chineseCount, extractExplicitDates, isCancellation, isReadOnlyQuestion, isRecentUndoRequest, parseLinkSelection, parseListedRecordDeletion, parseRecentTotalRecordDeletion, parseSingleSelection, parseTodoAddition, parseTotalRecordDeletion, parseTotalRecordListRequest, planWithDeepSeek, startFeishuBridge, validatePlan };
