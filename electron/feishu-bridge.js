@@ -131,7 +131,7 @@ function parseTotalRecordListRequest(text) {
 function parseListedRecordDeletion(text) {
   const value = String(text || "");
   if (!/(删除|删掉)/.test(value)) return null;
-  const match = value.match(/(?:删除|删掉)\s*(?:[^\d]*?(?:中|里))?\s*(\d+)\s*[.、．]/);
+  const match = value.match(/(?:删除|删掉)\s*(?:[^\d]*?(?:中|里))?\s*(?:第\s*)?(\d+)\s*(?:[.、．]|条|个)/);
   return match ? Number(match[1]) : null;
 }
 function isReadOnlyQuestion(text) {
@@ -154,7 +154,13 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
   const inFlight = new Set();
   const pendingByUser = new Map();
   const conversationByUser = new Map();
-  const recentTotalRecordLists = new Map();
+  const presentedCandidatesByUser = new Map();
+  const rememberPresentedCandidates = (openId, items) => presentedCandidatesByUser.set(openId, { items, expiresAt: Date.now() + 10 * 60 * 1000 });
+  const presentedCandidates = openId => {
+    const value = presentedCandidatesByUser.get(openId);
+    if (!value || value.expiresAt < Date.now()) { presentedCandidatesByUser.delete(openId); return []; }
+    return value.items;
+  };
   const rememberConversation = (openId, role, text) => {
     const history = [...(conversationByUser.get(openId) || []), { role, text: String(text).slice(0, 500) }].slice(-12);
     conversationByUser.set(openId, history);
@@ -212,9 +218,11 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
       }
       const listedIndex = !pending && parseListedRecordDeletion(text);
       if (listedIndex) {
-        const target = recentTotalRecordLists.get(openId)?.[listedIndex - 1];
-        if (!target) return void await reply(messageId, "没有可引用的总计记录序号，请先查询总计项目的记录。", openId);
-        return void await askDeleteConfirmation(messageId, openId, { kind: "delete-total-record-select", target }, `将删除：总计「${target.projectName}」·${target.label}`);
+        const selected = presentedCandidates(openId)[listedIndex - 1];
+        if (!selected) return void await reply(messageId, "没有可引用的候选序号，请先查询或列出记录。", openId);
+        if (selected.kind === "total-record") return void await askDeleteConfirmation(messageId, openId, { kind: "delete-total-record-select", target: selected.target }, `将删除：${selected.label}`);
+        if (selected.kind === "entity") return void await askDeleteConfirmation(messageId, openId, { kind: "select", entity: selected.target.entity, target: selected.target, patch: {}, operation: "delete" }, `将删除：${selected.label}`);
+        return void await reply(messageId, "该候选项不支持删除。", openId);
       }
       const listRequest = !pending && parseTotalRecordListRequest(text);
       if (listRequest) {
@@ -222,7 +230,7 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
         if (!result.totalRecordList) return void await reply(messageId, result.text, openId);
         const { projectName, records } = result.totalRecordList;
         const listed = records.map(record => ({ ...record, projectName }));
-        recentTotalRecordLists.set(openId, listed);
+        rememberPresentedCandidates(openId, listed.map(record => ({ kind: "total-record", target: record, label: `总计「${projectName}」·${record.label}` })));
         return void await reply(messageId, `总计「${projectName}」最近${listed.length}条记录：\n${listed.map((record, index) => `${index + 1}. ${record.label}`).join("\n")}`, openId);
       }
       const recordDeletion = !pending && parseTotalRecordDeletion(text);
@@ -231,6 +239,7 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
         if (result.totalRecordDeleteCandidates) {
           const candidates = result.totalRecordDeleteCandidates;
           pendingByUser.set(openId, { kind: "total-record-delete", candidates, summary: candidates.map((item, index) => ({ index: index + 1, label: item.label })) });
+          rememberPresentedCandidates(openId, candidates.map(target => ({ kind: "total-record", target, label: target.label })));
           return void await reply(messageId, `请选择要从总计中删除的明细：\n${formatCandidates(candidates)}\n\n回复序号即可。关联账单只会取消关联，不会删除原账单。`, openId);
         }
         return void await reply(messageId, result.text, openId);
@@ -295,6 +304,7 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
       }
       if (result.candidates) {
         pendingByUser.set(openId, { candidates: result.candidates, summary: result.candidates.map((item, index) => ({ index: index + 1, entity: item.entity, label: item.label })) });
+        rememberPresentedCandidates(openId, result.candidates.map(target => ({ kind: "entity", target, label: target.label })));
         return void await reply(messageId, `找到以下记录，请回复“序号 + 修改内容”或“序号，撤回”：\n${formatCandidates(result.candidates)}`, openId);
       }
       await reply(messageId, result.text, openId);
