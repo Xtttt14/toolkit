@@ -55,7 +55,7 @@ async function answerWithDeepSeek(text, context, apiKey) {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
-      model: "deepseek-v4-flash",
+      model: "deepseek-v4-pro",
       thinking: { type: "disabled" },
       max_tokens: 1000,
       messages: [
@@ -74,7 +74,7 @@ async function planWithDeepSeek(text, pending, history, apiKey) {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
-      model: "deepseek-v4-flash",
+      model: "deepseek-v4-pro",
       thinking: { type: "disabled" },
       response_format: { type: "json_object" },
       max_tokens: 600,
@@ -366,7 +366,7 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
       if (data.sender.sender_id?.open_id === allowedOpenId && data.message.chat_type === "p2p") void processMessage(data);
     }
   }) });
-  logger.info("飞书桥接已启动：DeepSeek V4 Flash，仅处理授权账号的私聊消息。");
+  logger.info("飞书桥接已启动：DeepSeek V4 Pro，仅处理授权账号的私聊消息。");
   return { started: true };
 }
 
