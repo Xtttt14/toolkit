@@ -737,6 +737,16 @@ function applySelection(target, patch, operation, track = true) {
   if (entity === "total") { const data = getFinanceData(); const index = data.totalProjects.findIndex(item => item.id === id); if (index < 0) throw new Error("总计项目不存在"); const before = data.totalProjects[index]; if (operation === "delete") data.totalProjects.splice(index, 1); else data.totalProjects[index] = normalizeTotalProjects([{ ...before, ...patch, id, createdAt: before.createdAt, updatedAt: new Date().toISOString() }])[0]; saveFinanceData(data); broadcastFinance(); const current = operation === "delete" ? before : data.totalProjects[index]; if (track) remember({ kind: operation === "delete" ? "delete" : "update", entity, id, before, label: label(entity, current) }); return `${operation === "delete" ? "已撤回" : "已修改"}${label(entity, current)}`; }
   const day = getDay(date); const index = day.entries.findIndex(item => item.id === id); if (index < 0) throw new Error("饮水记录不存在"); const before = day.entries[index]; if (operation === "delete") removeWater(id, date); else { day.entries[index] = { ...before, ml: Number(patch.ml || before.ml) }; if (!(day.entries[index].ml > 0)) throw new Error("饮水量必须大于0"); setDay(date, day); broadcastState(); } const current = operation === "delete" ? before : day.entries[index]; if (track) remember({ kind: operation === "delete" ? "delete" : "update", entity, id, date, before, label: label(entity, current) }); return `${operation === "delete" ? "已撤回" : "已修改"}${label(entity, current)}`;
 }
+function addTotalProjectRecord(projectId, rawRecord) {
+  const data = getFinanceData(); const project = data.totalProjects.find(item => item.id === projectId);
+  if (!project) throw new Error("总计项目不存在");
+  const record = normalizeTotalProjectRecord(rawRecord);
+  if (record.amount <= 0) throw new Error("金额必须大于0");
+  project.records.unshift(record); project.updatedAt = new Date().toISOString(); saveFinanceData(data); broadcastFinance();
+  const recordLabel = `${record.amount}元${record.note ? `·${record.note}` : ""}${record.date ? `（${record.date}）` : ""}`;
+  remember({ kind: "total-record-add", projectId: project.id, id: record.id, label: `${label("total", project)}中的独立记录${recordLabel}` });
+  return { text: `已在${label("total", project)}新增独立记录${recordLabel}` };
+}
 function executeFeishuAction(plan) {
   if (plan.kind === "undo_last") return { text: undoLast() };
   if (plan.kind === "find") { const found = candidates(plan.entity, plan.query); return found.length ? { candidates: found } : { text: "没有找到匹配的记录。" }; }
@@ -756,17 +766,11 @@ function executeFeishuAction(plan) {
     if (!total.length) return { text: "没有找到要新增独立记录的总计项目。" };
     const record = normalizeTotalProjectRecord({ amount: plan.patch?.amount, note: plan.patch?.note || "", date: plan.patch?.date || null });
     if (record.amount <= 0) throw new Error("金额必须大于0");
+    if (total.length === 1) return addTotalProjectRecord(total[0].id, record);
     return { totalRecordCandidates: { total, record } };
   }
   if (plan.kind === "add-total-record-select") {
-    const data = getFinanceData(); const project = data.totalProjects.find(item => item.id === plan.totalId);
-    if (!project) throw new Error("总计项目不存在");
-    const record = normalizeTotalProjectRecord(plan.record);
-    if (record.amount <= 0) throw new Error("金额必须大于0");
-    project.records.unshift(record); project.updatedAt = new Date().toISOString(); saveFinanceData(data); broadcastFinance();
-    const recordLabel = `${record.amount}元${record.note ? `·${record.note}` : ""}${record.date ? `（${record.date}）` : ""}`;
-    remember({ kind: "total-record-add", projectId: project.id, id: record.id, label: `${label("total", project)}中的独立记录${recordLabel}` });
-    return { text: `已在${label("total", project)}新增独立记录${recordLabel}` };
+    return addTotalProjectRecord(plan.totalId, plan.record);
   }
   if (plan.kind === "delete-recent-total-records") {
     const total = candidates("total", plan.query);
