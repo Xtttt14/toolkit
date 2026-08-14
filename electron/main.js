@@ -690,6 +690,25 @@ function broadcastFinance() {
 function feishuHistory() { return appStore.get("_feishuActionHistory", []); }
 function saveFeishuHistory(history) { appStore.set("_feishuActionHistory", history.slice(-100)); }
 function remember(action) { saveFeishuHistory([...feishuHistory(), action]); }
+function getFeishuConversation(openId) {
+  const conversations = appStore.get("_feishuConversations", {});
+  return Array.isArray(conversations[String(openId)]) ? conversations[String(openId)] : [];
+}
+function saveFeishuConversation(openId, messages) {
+  const conversations = appStore.get("_feishuConversations", {});
+  conversations[String(openId)] = (Array.isArray(messages) ? messages : []).slice(-80);
+  appStore.set("_feishuConversations", conversations);
+}
+function getFeishuRuntimeState(openId) {
+  const states = appStore.get("_feishuRuntimeStates", {});
+  const state = states[String(openId)];
+  return state && typeof state === "object" ? state : {};
+}
+function saveFeishuRuntimeState(openId, state) {
+  const states = appStore.get("_feishuRuntimeStates", {});
+  states[String(openId)] = state && typeof state === "object" ? state : {};
+  appStore.set("_feishuRuntimeStates", states);
+}
 function label(entity, item) {
   if (entity === "todo") return `待办「${item.title}」${item.dueDate ? `（${item.dueDate.slice(0, 10)}）` : ""}`;
   if (entity === "finance") return `${item.type === "income" ? "收入" : "支出"}${item.amount}元·${item.tag}${item.note ? `·${item.note}` : ""}（${item.date}）`;
@@ -1746,7 +1765,11 @@ app.whenReady().then(() => {
     allowedOpenId: process.env.FEISHU_ALLOWED_OPEN_ID,
     deepSeekApiKey: process.env.DEEPSEEK_API_KEY,
     onAction: executeFeishuAction,
-    onChatContext: getFeishuChatContext
+    onChatContext: getFeishuChatContext,
+    onConversationLoad: getFeishuConversation,
+    onConversationSave: saveFeishuConversation,
+    onRuntimeLoad: getFeishuRuntimeState,
+    onRuntimeSave: saveFeishuRuntimeState
   });
   updateTray();
   startReminderLoop();
