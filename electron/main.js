@@ -713,7 +713,13 @@ function restore(entity, item, date) {
 }
 function undoLast() {
   const history = feishuHistory(); const last = history.pop(); if (!last) return "没有可撤回的飞书操作。";
-  if (last.kind === "add") applySelection({ entity: last.entity, id: last.id, date: last.date }, {}, "delete", false);
+  if (last.kind === "total-record-add") {
+    const data = getFinanceData(); const project = data.totalProjects.find(item => item.id === last.projectId);
+    if (!project) throw new Error("总计项目不存在");
+    const index = project.records.findIndex(item => item.id === last.id); if (index < 0) throw new Error("总计独立记录不存在");
+    project.records.splice(index, 1); project.updatedAt = new Date().toISOString(); saveFinanceData(data); broadcastFinance();
+  }
+  else if (last.kind === "add") applySelection({ entity: last.entity, id: last.id, date: last.date }, {}, "delete", false);
   else if (last.kind === "delete") restore(last.entity, last.before, last.date);
   else applySelection({ entity: last.entity, id: last.id, date: last.date }, last.before, "update", false);
   saveFeishuHistory(history); return `已撤回：${last.label}`;
@@ -738,6 +744,23 @@ function executeFeishuAction(plan) {
     if (!entry || !project) throw new Error("账单或总计项目不存在");
     if (!project.linkedEntryIds.includes(entry.id)) { project.linkedEntryIds.push(entry.id); project.updatedAt = new Date().toISOString(); saveFinanceData(data); broadcastFinance(); }
     return { text: `已将${label("finance", entry)}关联到${label("total", project)}` };
+  }
+  if (plan.kind === "add_total_record") {
+    const total = candidates("total", plan.query);
+    if (!total.length) return { text: "没有找到要新增独立记录的总计项目。" };
+    const record = normalizeTotalProjectRecord({ amount: plan.patch?.amount, note: plan.patch?.note || "", date: plan.patch?.date || null });
+    if (record.amount <= 0) throw new Error("金额必须大于0");
+    return { totalRecordCandidates: { total, record } };
+  }
+  if (plan.kind === "add-total-record-select") {
+    const data = getFinanceData(); const project = data.totalProjects.find(item => item.id === plan.totalId);
+    if (!project) throw new Error("总计项目不存在");
+    const record = normalizeTotalProjectRecord(plan.record);
+    if (record.amount <= 0) throw new Error("金额必须大于0");
+    project.records.unshift(record); project.updatedAt = new Date().toISOString(); saveFinanceData(data); broadcastFinance();
+    const recordLabel = `${record.amount}元${record.note ? `·${record.note}` : ""}${record.date ? `（${record.date}）` : ""}`;
+    remember({ kind: "total-record-add", projectId: project.id, id: record.id, label: `${label("total", project)}中的独立记录${recordLabel}` });
+    return { text: `已在${label("total", project)}新增独立记录${recordLabel}` };
   }
   if (plan.kind === "select") return { text: applySelection(plan.target, plan.patch, plan.operation) };
   const { entity, patch } = plan;
