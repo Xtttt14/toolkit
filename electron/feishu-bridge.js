@@ -186,8 +186,10 @@ function parseNaturalWaterCommand(text) {
 function parseTodoAddition(text) {
   const match = String(text || "").match(/^\s*(?:新增|增加|添加|加)(?:一个|一条)?待办(?:事项|任务)?\s*(?:[，,：:]\s*)?(.*)$/);
   if (!match) return null;
-  const title = match[1].replace(/^标题\s*(?:为|是|[:：])?\s*/, "").trim();
-  return title ? { kind: "add", entity: "todo", patch: { title } } : null;
+  const raw = match[1].replace(/^标题\s*(?:为|是|[:：])?\s*/, "").trim();
+  const priority = raw.match(/(?:[，,；;\s]+)?(?:优先级\s*(?:为|是)?\s*)?(P[0-3])\s*$/i)?.[1]?.toUpperCase();
+  const title = raw.replace(/(?:[，,；;\s]+)?(?:优先级\s*(?:为|是)?\s*)?P[0-3]\s*$/i, "").trim();
+  return title ? { kind: "add", entity: "todo", patch: { title, ...(priority ? { priority } : {}) } } : null;
 }
 function isReadOnlyQuestion(text) {
   const value = String(text || "").trim();

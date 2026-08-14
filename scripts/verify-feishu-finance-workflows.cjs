@@ -23,6 +23,7 @@ assert.deepEqual(parseNaturalWaterCommand("加一杯水"), { kind: "add", entity
 assert.deepEqual(parseNaturalWaterCommand("喝了300ml水"), { kind: "add", entity: "water", patch: { ml: 300 } });
 assert.equal(parseNaturalWaterCommand("增加一笔娱乐记账，59.9元"), null);
 assert.deepEqual(parseTodoAddition("加一个待办，简单意图评估创建"), { kind: "add", entity: "todo", patch: { title: "简单意图评估创建" } });
+assert.deepEqual(parseTodoAddition("加一个待办，简单意图评估集创建，优先级为P0"), { kind: "add", entity: "todo", patch: { title: "简单意图评估集创建", priority: "P0" } });
 assert.deepEqual(parseNaturalFinanceSummary("这个月花了多少", new Date("2026-08-14T12:00:00")), { kind: "finance_summary", entity: "finance", query: { month: "2026-08" } });
 assert.deepEqual(parseNaturalFinanceSummary("2026年7月支出合计", new Date("2026-08-14T12:00:00")), { kind: "finance_summary", entity: "finance", query: { month: "2026-07" } });
 console.log("飞书多步骤记账工作流检查通过。");
