@@ -723,6 +723,25 @@ function executeFeishuAction(plan) {
   throw new Error("不支持的飞书操作");
 }
 
+function getFeishuChatContext() {
+  const todo = getTodoData();
+  const finance = getFinanceData();
+  const water = getWaterState();
+  return {
+    generatedAt: new Date().toISOString(),
+    todo: todo.tasks.slice(0, 100).map(item => ({ title: item.title, description: item.description, priority: item.priority, dueDate: item.dueDate, completed: item.completed, tags: item.tags })),
+    finance: {
+      entries: finance.entries.slice(0, 100).map(item => ({ type: item.type, amount: item.amount, tag: item.tag, note: item.note, date: item.date })),
+      totalProjects: finance.totalProjects.slice(0, 100).map(item => ({ name: item.name, records: item.records.map(record => ({ amount: record.amount, note: record.note, date: record.date })) }))
+    },
+    water: {
+      date: water.date,
+      today: { cups: water.today.cups, totalMl: water.today.totalMl, targetMl: water.today.targetMl, lastEntry: water.today.lastEntry },
+      recentEntries: Object.entries(water.history.days).flatMap(([date, day]) => day.entries.map(item => ({ date, ml: item.ml, at: item.at }))).slice(-60)
+    }
+  };
+}
+
 // ═══════ 番茄钟逻辑 ═══════
 function normalizePomodoroSession(session = {}) {
   const startedAt = session.startedAt && !Number.isNaN(new Date(session.startedAt).getTime())
@@ -1577,7 +1596,8 @@ app.whenReady().then(() => {
     appSecret: process.env.FEISHU_APP_SECRET,
     allowedOpenId: process.env.FEISHU_ALLOWED_OPEN_ID,
     deepSeekApiKey: process.env.DEEPSEEK_API_KEY,
-    onAction: executeFeishuAction
+    onAction: executeFeishuAction,
+    onChatContext: getFeishuChatContext
   });
   updateTray();
   startReminderLoop();
