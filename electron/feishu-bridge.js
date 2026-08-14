@@ -124,6 +124,16 @@ function parseTotalRecordDeletion(text) {
   const query = value.replace(/删除|删掉|撤回|取消|一条|一笔|记录|明细|用于|总计项目|总计|项目|里面|中|里的|的/g, "").trim();
   return query ? { query: { text: query } } : null;
 }
+function parseTotalRecordListRequest(text) {
+  const match = String(text || "").match(/^\s*(.+?)总计项目中最近\s*(\d+)\s*(?:个|条)?记录/);
+  return match ? { query: { text: match[1].trim() }, count: Number(match[2]) } : null;
+}
+function parseListedRecordDeletion(text) {
+  const value = String(text || "");
+  if (!/(删除|删掉)/.test(value)) return null;
+  const match = value.match(/(?:删除|删掉)\s*(?:[^\d]*?(?:中|里))?\s*(\d+)\s*[.、．]/);
+  return match ? Number(match[1]) : null;
+}
 function isReadOnlyQuestion(text) {
   const value = String(text || "").trim();
   const asksForInfo = /(什么|哪些|多少|几条|查询|查看|列出|统计|情况|吗|？|\?)/.test(value);
@@ -144,6 +154,7 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
   const inFlight = new Set();
   const pendingByUser = new Map();
   const conversationByUser = new Map();
+  const recentTotalRecordLists = new Map();
   const rememberConversation = (openId, role, text) => {
     const history = [...(conversationByUser.get(openId) || []), { role, text: String(text).slice(0, 500) }].slice(-12);
     conversationByUser.set(openId, history);
@@ -198,6 +209,21 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
         const result = await onAction({ kind: "preview-delete-recent-total-records", ...batchDeletion });
         if (result.deletePreview) return void await askDeleteConfirmation(messageId, openId, result.deletePreview.action, result.deletePreview.text);
         return void await reply(messageId, result.text, openId);
+      }
+      const listedIndex = !pending && parseListedRecordDeletion(text);
+      if (listedIndex) {
+        const target = recentTotalRecordLists.get(openId)?.[listedIndex - 1];
+        if (!target) return void await reply(messageId, "没有可引用的总计记录序号，请先查询总计项目的记录。", openId);
+        return void await askDeleteConfirmation(messageId, openId, { kind: "delete-total-record-select", target }, `将删除：总计「${target.projectName}」·${target.label}`);
+      }
+      const listRequest = !pending && parseTotalRecordListRequest(text);
+      if (listRequest) {
+        const result = await onAction({ kind: "list-total-records", ...listRequest });
+        if (!result.totalRecordList) return void await reply(messageId, result.text, openId);
+        const { projectName, records } = result.totalRecordList;
+        const listed = records.map(record => ({ ...record, projectName }));
+        recentTotalRecordLists.set(openId, listed);
+        return void await reply(messageId, `总计「${projectName}」最近${listed.length}条记录：\n${listed.map((record, index) => `${index + 1}. ${record.label}`).join("\n")}`, openId);
       }
       const recordDeletion = !pending && parseTotalRecordDeletion(text);
       if (recordDeletion) {
@@ -290,4 +316,4 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
   return { started: true };
 }
 
-module.exports = { answerWithDeepSeek, applyExplicitDates, buildPlannerPrompt, chineseCount, extractExplicitDates, isCancellation, isReadOnlyQuestion, isRecentUndoRequest, parseLinkSelection, parseRecentTotalRecordDeletion, parseSingleSelection, parseTotalRecordDeletion, planWithDeepSeek, startFeishuBridge, validatePlan };
+module.exports = { answerWithDeepSeek, applyExplicitDates, buildPlannerPrompt, chineseCount, extractExplicitDates, isCancellation, isReadOnlyQuestion, isRecentUndoRequest, parseLinkSelection, parseListedRecordDeletion, parseRecentTotalRecordDeletion, parseSingleSelection, parseTotalRecordDeletion, parseTotalRecordListRequest, planWithDeepSeek, startFeishuBridge, validatePlan };

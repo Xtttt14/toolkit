@@ -790,6 +790,17 @@ function executeFeishuAction(plan) {
     const candidates = totalRecordDeleteCandidates(plan.query);
     return candidates.length ? { totalRecordDeleteCandidates: candidates } : { text: "没有找到匹配的总计明细，未执行删除。" };
   }
+  if (plan.kind === "list-total-records") {
+    const total = candidates("total", plan.query);
+    if (!total.length) return { text: "没有找到该总计项目。" };
+    if (total.length > 1) return { text: "找到多个匹配的总计项目，请提供更完整的项目名称。" };
+    const data = getFinanceData(); const project = data.totalProjects.find(item => item.id === total[0].id);
+    const direct = project.records.map(record => ({ kind: "direct", projectId: project.id, recordId: record.id, date: record.date, createdAt: record.createdAt, label: `直接添加${record.amount}元${record.note ? `·${record.note}` : ""}${record.date ? `（${record.date}）` : ""}` }));
+    const linked = data.entries.filter(entry => project.linkedEntryIds.includes(entry.id)).map(entry => ({ kind: "linked", projectId: project.id, entryId: entry.id, date: entry.date, createdAt: entry.createdAt, label: `关联账单${entry.amount}元·${entry.tag}${entry.note ? `·${entry.note}` : ""}（${entry.date}）` }));
+    const count = Math.max(1, Math.min(20, Math.floor(Number(plan.count) || 5)));
+    const records = [...direct, ...linked].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")) || String(b.createdAt || "").localeCompare(String(a.createdAt || ""))).slice(0, count);
+    return { totalRecordList: { projectName: project.name, records } };
+  }
   if (plan.kind === "delete-total-record-select") {
     const target = plan.target || {}; const data = getFinanceData(); const project = data.totalProjects.find(item => item.id === target.projectId);
     if (!project) throw new Error("总计项目不存在");
