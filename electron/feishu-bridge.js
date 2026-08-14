@@ -118,6 +118,12 @@ function parseRecentTotalRecordDeletion(text) {
   const parsedCount = count ? chineseCount(count[1]) : null;
   return project?.[1] && parsedCount && parsedCount > 0 ? { query: { text: project[1].trim() }, count: parsedCount } : null;
 }
+function isReadOnlyQuestion(text) {
+  const value = String(text || "").trim();
+  const asksForInfo = /(什么|哪些|多少|几条|查询|查看|列出|统计|情况|吗|？|\?)/.test(value);
+  const mutatesData = /(新增|添加|加一|修改|改成|删除|删掉|撤回|取消|关联|记入|支出|收入)/.test(value);
+  return asksForInfo && !mutatesData;
+}
 
 function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, onAction, onChatContext, logger = console }) {
   if (!appId || !appSecret || !allowedOpenId || !deepSeekApiKey) {
@@ -161,6 +167,10 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
         const result = await onAction({ kind: "undo_last" });
         return void await reply(messageId, result.text, openId);
       }
+      if (isReadOnlyQuestion(text)) {
+        pendingByUser.delete(openId);
+        return void await reply(messageId, await answerWithDeepSeek(text, onChatContext?.() || {}, deepSeekApiKey), openId);
+      }
       if (pending?.kind === "link") {
         const selection = parseLinkSelection(text);
         if (!selection || !pending.finance[selection.financeIndex - 1] || !pending.total[selection.totalIndex - 1]) {
@@ -177,6 +187,9 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
         const result = await onAction({ kind: "add-total-record-select", totalId: project.id, record: pending.record });
         pendingByUser.delete(openId);
         return void await reply(messageId, result.text, openId);
+      }
+      if (pending?.candidates && /^\s*\d+\s*$/.test(text)) {
+        return void await reply(messageId, "已选中该记录。请继续说明要修改什么，或回复“序号，撤回”。", openId);
       }
       const plan = await planWithDeepSeek(text, pending?.summary, conversationByUser.get(openId), deepSeekApiKey);
       if (plan.kind === "clarify") return void await reply(messageId, plan.message, openId);
@@ -223,4 +236,4 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
   return { started: true };
 }
 
-module.exports = { answerWithDeepSeek, applyExplicitDates, buildPlannerPrompt, chineseCount, extractExplicitDates, isRecentUndoRequest, parseLinkSelection, parseRecentTotalRecordDeletion, parseSingleSelection, planWithDeepSeek, startFeishuBridge, validatePlan };
+module.exports = { answerWithDeepSeek, applyExplicitDates, buildPlannerPrompt, chineseCount, extractExplicitDates, isReadOnlyQuestion, isRecentUndoRequest, parseLinkSelection, parseRecentTotalRecordDeletion, parseSingleSelection, planWithDeepSeek, startFeishuBridge, validatePlan };
