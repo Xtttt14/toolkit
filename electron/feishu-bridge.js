@@ -14,9 +14,9 @@ function extractExplicitDates(text, now = new Date()) {
 }
 function applyExplicitDates(plan, text) {
   const dates = extractExplicitDates(text);
-  if (!dates.length || plan.kind !== "add") return plan;
+  if (!dates.length || !["add", "select"].includes(plan.kind)) return plan;
   const patch = { ...plan.patch };
-  if (plan.entity === "finance") { patch.date = dates[0]; patch.dates = dates; }
+  if (plan.entity === "finance" || plan.kind === "select") { patch.date = dates[0]; if (plan.kind === "add") patch.dates = dates; }
   if (plan.entity === "todo") patch.dueDate = dates[0];
   return { ...plan, patch };
 }
@@ -128,7 +128,7 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
         const index = plan.selection || Number(String(text).match(/^\s*(\d+)/)?.[1]);
         const selected = pending?.candidates?.[index - 1];
         if (!selected) return void await reply(messageId, "请先回复候选项序号，例如：2，金额改为35。", openId);
-        const result = await onAction({ ...plan, entity: selected.entity, target: selected });
+        const result = await onAction(applyExplicitDates({ ...plan, entity: selected.entity, target: selected }, text));
         pendingByUser.delete(openId);
         return void await reply(messageId, result.text, openId);
       }
