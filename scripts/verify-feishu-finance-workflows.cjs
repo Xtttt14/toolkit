@@ -1,6 +1,7 @@
 const assert = require("assert");
 const { applyExplicitDates, isRelevantClarification, parseListedRecordDeletion, parseNaturalFinanceCommand, parseNaturalFinanceSummary, parseNaturalWaterCommand, parseTodoAddition, validatePlan } = require("../electron/feishu-bridge");
 const { ASSISTANT_TOOL_NAMES, normalizeMathExpression } = require("../electron/assistant-tools");
+const { ToolAgent, ToolRegistry } = require("../electron/tool-agent");
 
 const createAndLink = parseNaturalFinanceCommand("增加一笔记账，娱乐，59.9元，备注265张25cm生态纸+8张21cm棉箔纸，同时把这个账单关联到折纸总计项目中");
 assert.equal(createAndLink.kind, "workflow");
@@ -35,4 +36,11 @@ assert.equal(parseListedRecordDeletion("删掉1."), 1);
 assert.equal(normalizeMathExpression("（123 + 28） / 3"), "(123 + 28) / 3");
 assert.equal(isRelevantClarification("请问要删除哪一项待办？", "16号计入消费"), false);
 assert.equal(isRelevantClarification("三笔消费是否都按列出的金额入账？", "16号计入消费"), true);
-console.log("飞书多步骤记账工作流检查通过。");
+(async () => {
+  let agentCalls = 0;
+  const fakeFetch = async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: agentCalls++ === 0 ? JSON.stringify({ kind: "tool_calls", calls: [{ name: "water.add", arguments: {} }] }) : JSON.stringify({ kind: "final", message: "已记录一杯水。" }) } }] }) });
+  const agent = new ToolAgent({ apiKey: "test", model: "test", registry: new ToolRegistry({ tools: [], execute: async () => ({ text: "饮水200ml", references: null }) }), validatePlan, systemPrompt: () => "test", fetchImpl: fakeFetch });
+  const result = await agent.run("加一杯水");
+  assert.equal(result.text, "已记录一杯水。");
+  console.log("飞书多步骤记账工作流检查通过。");
+})().catch(error => { console.error(error); process.exitCode = 1; });

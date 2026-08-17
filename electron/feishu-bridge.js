@@ -26,9 +26,10 @@ function applyExplicitDates(plan, text) {
 function buildPlannerPrompt(text, pending, history) {
   return `你是个人工具箱的工具调用规划器。只输出一个 JSON 对象，不要 Markdown。
 工具目录：${assistantToolProtocol()}
-只能输出两种结果之一：
+只能输出三种结果之一：
 1. {"kind":"tool_calls","calls":[{"name":"工具名","arguments":{}}]}。
 2. {"kind":"clarify","message":"只问一个关键缺失信息的问题"}。
+3. {"kind":"final","message":"基于真实工具结果给用户的简洁答复"}。只有已经拿到工具结果或用户纯聊天时才可输出 final。
 只要用户请求查看、记录、修改或执行工具箱能力，必须输出 tool_calls，绝不能输出聊天回答或旧版 kind/entity/workflow 格式。多条编号消费、多个待办或多个连续动作必须保留为多个条目或多个 calls，按顺序执行，不能只处理第一条。
 金额出现算式时，先调用 math.calculate，并给 resultKey；后续账单 amount 使用 "$resultKey"。中文括号和英文括号都可传给 math.calculate。用户说“16号/16日”时，账单 date 使用本地日期所属年月的 16 日。午餐、晚餐等餐饮默认使用“三餐”标签。
 参数缺失、对象指代不唯一、金额含义不能确定时，输出 clarify；不要猜测，不要把写入请求改成待办/聊天查询。
@@ -45,9 +46,10 @@ function isRelevantClarification(message, text) {
 }
 
 function validatePlan(plan) {
-  const kinds = new Set(["tool_calls", "add", "workflow", "finance_summary", "add_and_link_finance", "update_recent_finance", "add_total_record", "undo_last", "find", "select", "link", "chat", "clarify", "cancel"]);
+  const kinds = new Set(["tool_calls", "final", "add", "workflow", "finance_summary", "add_and_link_finance", "update_recent_finance", "add_total_record", "undo_last", "find", "select", "link", "chat", "clarify", "cancel"]);
   const entities = new Set(["todo", "finance", "total", "water"]);
   if (!plan || typeof plan !== "object" || !kinds.has(plan.kind)) throw new Error("DeepSeek 返回了无效命令");
+  if (plan.kind === "final") return { kind: "final", message: String(plan.message || "操作已完成。") };
   if (plan.kind === "tool_calls") {
     if (!Array.isArray(plan.calls) || !plan.calls.length || plan.calls.length > 8 || plan.calls.some(call => !call || !ASSISTANT_TOOL_NAMES.has(call.name) || !call.arguments || typeof call.arguments !== "object")) throw new Error("DeepSeek 返回了无效工具调用");
     return { kind: "tool_calls", calls: plan.calls.map(call => ({ name: call.name, arguments: call.arguments })) };
@@ -234,6 +236,14 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
   }
   const Lark = require("@larksuiteoapi/node-sdk");
   const client = new Lark.Client({ appId, appSecret });
+  const toolAgent = new ToolAgent({
+    apiKey: deepSeekApiKey,
+    model: "deepseek-v4-pro",
+    registry: new ToolRegistry({ tools: require("./assistant-tools").ASSISTANT_TOOLS, execute: onAction }),
+    validatePlan,
+    systemPrompt: (_tools, context) => buildPlannerPrompt("", context?.pending || null, []),
+    maxIterations: 5
+  });
   const inFlight = new Set();
   const pendingByUser = new Map();
   const conversationByUser = new Map();
@@ -306,6 +316,19 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
       const pending = pendingByUser.get(openId) || null;
       rememberConversation(openId, "user", text);
       const plannerContext = { pending: pending?.summary || null, presented: presentedCandidates(openId).map((item, index) => ({ index: index + 1, label: item.label })), references: referencesByUser.get(openId) || null };
+      const isLegacyDestructiveRequest = /(删除|删掉|撤回|取消)/.test(text);
+      if (!pending && !isLegacyDestructiveRequest) {
+        const agent = await toolAgent.run(text, plannerContext);
+        if (agent.status === "clarify") return void await reply(messageId, agent.text, openId);
+        const result = agent.result || { text: agent.text };
+        rememberReferences(openId, result.references);
+        if (result.candidates) {
+          pendingByUser.set(openId, { candidates: result.candidates, summary: result.candidates.map((item, index) => ({ index: index + 1, entity: item.entity, label: item.label })) });
+          rememberPresentedCandidates(openId, result.candidates.map(target => ({ kind: "entity", target, label: target.label })));
+          return void await reply(messageId, `找到以下记录，请回复“序号 + 修改内容”或“序号，撤回”：\n${formatCandidates(result.candidates)}`, openId);
+        }
+        return void await reply(messageId, agent.text || result.text, openId);
+      }
       const fallback = parseNaturalFinanceSummary(text) || parseNaturalWaterCommand(text) || parseTodoAddition(text) || parseNaturalFinanceCommand(text);
       let planned;
       try { planned = await planWithDeepSeek(text, plannerContext, conversationByUser.get(openId)?.slice(-48), deepSeekApiKey); }
@@ -447,3 +470,4 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
 
 module.exports = { answerWithDeepSeek, applyExplicitDates, buildPlannerPrompt, chineseCount, extractExplicitDates, isCancellation, isReadOnlyQuestion, isRecentUndoRequest, isRelevantClarification, parseLinkSelection, parseListedRecordDeletion, parseNaturalFinanceCommand, parseNaturalFinanceSummary, parseNaturalWaterCommand, parseRecentTotalRecordDeletion, parseSingleSelection, parseTodoAddition, parseTotalRecordDeletion, parseTotalRecordListRequest, planWithDeepSeek, startFeishuBridge, validatePlan };
 const { ASSISTANT_TOOL_NAMES, assistantToolProtocol } = require("./assistant-tools");
+const { ToolAgent, ToolRegistry } = require("./tool-agent");
