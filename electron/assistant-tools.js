@@ -1,5 +1,6 @@
 // 模型可见的唯一能力目录。每个名字都必须由本地执行器实现，不能把 UI 文案当成工具能力。
 const ASSISTANT_TOOLS = [
+  { name: "math.calculate", description: "安全计算一个纯数值算式，供后续工具引用。", required: ["expression"], properties: { expression: "仅含数字、+ - * / () 和小数点的算式", resultKey: "结果引用名，可选；后续参数写 $该名称" } },
   { name: "water.add", description: "记录饮水；未传 ml 时使用当前选中水杯容量。", required: [], properties: { ml: "number，可选", date: "YYYY-MM-DD，可选" } },
   { name: "water.status", description: "查询今日饮水进度。", required: [], properties: {} },
   { name: "water.undo_last", description: "撤回刚刚记录的一杯水。", required: [], properties: {} },

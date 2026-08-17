@@ -27,7 +27,7 @@ assert.deepEqual(parseTodoAddition("加一个待办，简单意图评估创建")
 assert.deepEqual(parseTodoAddition("加一个待办，简单意图评估集创建，优先级为P0"), { kind: "add", entity: "todo", patch: { title: "简单意图评估集创建", priority: "P0" } });
 assert.deepEqual(parseNaturalFinanceSummary("这个月花了多少", new Date("2026-08-14T12:00:00")), { kind: "finance_summary", entity: "finance", query: { month: "2026-08" } });
 assert.deepEqual(parseNaturalFinanceSummary("2026年7月支出合计", new Date("2026-08-14T12:00:00")), { kind: "finance_summary", entity: "finance", query: { month: "2026-07" } });
-assert(ASSISTANT_TOOL_NAMES.has("water.add") && ASSISTANT_TOOL_NAMES.has("todo.create") && ASSISTANT_TOOL_NAMES.has("finance.batch_create") && ASSISTANT_TOOL_NAMES.has("pomodoro.start"));
+assert(ASSISTANT_TOOL_NAMES.has("math.calculate") && ASSISTANT_TOOL_NAMES.has("water.add") && ASSISTANT_TOOL_NAMES.has("todo.create") && ASSISTANT_TOOL_NAMES.has("finance.batch_create") && ASSISTANT_TOOL_NAMES.has("pomodoro.start"));
 assert.deepEqual(validatePlan({ kind: "tool_calls", calls: [{ name: "water.add", arguments: {} }] }), { kind: "tool_calls", calls: [{ name: "water.add", arguments: {} }] });
 assert.throws(() => validatePlan({ kind: "tool_calls", calls: [{ name: "system.delete", arguments: {} }] }));
 assert.equal(validatePlan({ kind: "clarify", message: "请补充金额" }).kind, "clarify");
