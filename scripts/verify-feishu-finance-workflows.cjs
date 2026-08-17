@@ -1,5 +1,5 @@
 const assert = require("assert");
-const { applyExplicitDates, parseNaturalFinanceCommand, parseNaturalFinanceSummary, parseNaturalWaterCommand, parseTodoAddition, validatePlan } = require("../electron/feishu-bridge");
+const { applyExplicitDates, parseListedRecordDeletion, parseNaturalFinanceCommand, parseNaturalFinanceSummary, parseNaturalWaterCommand, parseTodoAddition, validatePlan } = require("../electron/feishu-bridge");
 const { ASSISTANT_TOOL_NAMES } = require("../electron/assistant-tools");
 
 const createAndLink = parseNaturalFinanceCommand("增加一笔记账，娱乐，59.9元，备注265张25cm生态纸+8张21cm棉箔纸，同时把这个账单关联到折纸总计项目中");
@@ -30,4 +30,5 @@ assert.deepEqual(parseNaturalFinanceSummary("2026年7月支出合计", new Date(
 assert(ASSISTANT_TOOL_NAMES.has("water.add") && ASSISTANT_TOOL_NAMES.has("todo.create") && ASSISTANT_TOOL_NAMES.has("finance.batch_create") && ASSISTANT_TOOL_NAMES.has("pomodoro.start"));
 assert.deepEqual(validatePlan({ kind: "tool_calls", calls: [{ name: "water.add", arguments: {} }] }), { kind: "tool_calls", calls: [{ name: "water.add", arguments: {} }] });
 assert.throws(() => validatePlan({ kind: "tool_calls", calls: [{ name: "system.delete", arguments: {} }] }));
+assert.equal(parseListedRecordDeletion("删掉1."), 1);
 console.log("飞书多步骤记账工作流检查通过。");

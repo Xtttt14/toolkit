@@ -853,7 +853,7 @@ function financeMonthlySummary(month) {
   return { text: lines.join("\n") };
 }
 function executeAssistantToolCalls(calls) {
-  const results = []; const references = {};
+  const results = []; const references = {}; let candidates = null;
   const resolveRef = value => typeof value === "string" && value.startsWith("$") ? references[value.slice(1)]?.id || value : value;
   for (const call of calls) {
     const args = call.arguments || {};
@@ -871,7 +871,8 @@ function executeAssistantToolCalls(calls) {
     }
     if (call.name === "todo.list") {
       const query = String(args.text || "").toLowerCase(); const tasks = getTodoData().tasks.filter(task => (!query || `${task.title} ${task.description}`.toLowerCase().includes(query)) && (args.completed == null || task.completed === args.completed) && (!args.dueDate || task.dueDate?.startsWith(args.dueDate)));
-      results.push(tasks.length ? tasks.slice(0, 10).map((task, index) => `${index + 1}. ${label("todo", task)}`).join("\n") : "没有找到匹配的待办。"); continue;
+      candidates = tasks.slice(0, 10).map(task => ({ entity: "todo", id: task.id, label: label("todo", task) }));
+      results.push(candidates.length ? candidates.map((task, index) => `${index + 1}. ${task.label}`).join("\n") : "没有找到匹配的待办。"); continue;
     }
     if (call.name === "todo.update" || call.name === "todo.complete") {
       const id = resolveRef(args.taskId); const data = getTodoData(); const index = data.tasks.findIndex(task => task.id === id); if (index < 0) throw new Error("待办不存在或尚未被引用");
@@ -896,7 +897,7 @@ function executeAssistantToolCalls(calls) {
     if (call.name === "academic.exams.query") { const exams = getExamsData().exams.filter(exam => !args.date || exam.date === args.date); results.push(exams.length ? exams.slice(0, 20).map(exam => `${exam.date} · ${exam.name}${exam.time ? ` · ${exam.time}` : ""}${exam.location ? ` · ${exam.location}` : ""}`).join("\n") : "没有找到考试信息。"); continue; }
     throw new Error(`未实现的助手工具：${call.name}`);
   }
-  return { text: results.join("\n"), references: Object.keys(references).length ? references : null };
+  return { text: results.join("\n"), references: Object.keys(references).length ? references : null, candidates };
 }
 function executeFeishuAction(plan) {
   if (plan.kind === "undo_last") return { text: undoLast() };
