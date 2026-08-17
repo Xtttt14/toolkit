@@ -83,7 +83,8 @@ async function answerWithDeepSeek(text, context, apiKey) {
 }
 
 async function planWithDeepSeek(text, pending, history, apiKey) {
-  const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
+  const requestPlan = async messages => {
+    const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
@@ -91,12 +92,24 @@ async function planWithDeepSeek(text, pending, history, apiKey) {
       thinking: { type: "disabled" },
       response_format: { type: "json_object" },
       max_tokens: 600,
-      messages: [{ role: "system", content: buildPlannerPrompt("", pending, history) }, { role: "user", content: String(text || "") }]
+      messages
     })
-  });
-  if (!response.ok) throw new Error(`DeepSeek 请求失败：${response.status} ${await response.text()}`);
-  const body = await response.json();
-  return applyExplicitDates(validatePlan(JSON.parse(body.choices?.[0]?.message?.content || "")), text);
+    });
+    if (!response.ok) throw new Error(`DeepSeek 请求失败：${response.status} ${await response.text()}`);
+    const body = await response.json(); return String(body.choices?.[0]?.message?.content || "");
+  };
+  const system = buildPlannerPrompt("", pending, history);
+  const first = await requestPlan([{ role: "system", content: system }, { role: "user", content: String(text || "") }]);
+  const parseToolPlan = raw => {
+    try {
+      const plan = applyExplicitDates(validatePlan(JSON.parse(raw)), text);
+      return ["tool_calls", "clarify"].includes(plan.kind) ? plan : null;
+    } catch { return null; }
+  };
+  const parsed = parseToolPlan(first); if (parsed) return parsed;
+  const repaired = await requestPlan([{ role: "system", content: system }, { role: "user", content: String(text || "") }, { role: "assistant", content: first }, { role: "user", content: "上一个输出使用了已废弃的协议。请只按系统要求重新输出 tool_calls 或 clarify JSON；不要输出 chat、find、add、workflow、entity 或解释。" }]);
+  const retried = parseToolPlan(repaired); if (retried) return retried;
+  return { kind: "clarify", message: "我没有正确识别这条操作。请确认是否要按列出的项目批量记账。" };
 }
 
 function formatCandidates(candidates) {
