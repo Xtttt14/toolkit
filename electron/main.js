@@ -852,9 +852,56 @@ function financeMonthlySummary(month) {
   else lines.push("本月暂无支出记录。");
   return { text: lines.join("\n") };
 }
+function executeAssistantToolCalls(calls) {
+  const results = []; const references = {};
+  const resolveRef = value => typeof value === "string" && value.startsWith("$") ? references[value.slice(1)]?.id || value : value;
+  for (const call of calls) {
+    const args = call.arguments || {};
+    if (call.name === "water.add") {
+      const state = addDrink({ ml: args.ml, date: args.date, source: "feishu" }); const item = state.today.lastEntry;
+      results.push(`已记录饮水${item.ml}ml。`); references.last_water = { id: item.id, label: `饮水${item.ml}ml` }; continue;
+    }
+    if (call.name === "water.status") { const state = getWaterState(); results.push(`今日已饮水${state.today.cups}杯，${state.today.totalMl}/${state.today.targetMl}ml。`); continue; }
+    if (call.name === "water.undo_last") { undoDrink(); results.push("已撤回最近一杯水。"); continue; }
+    if (call.name === "todo.create") {
+      const title = String(args.title || "").trim(); if (!title) throw new Error("待办缺少标题");
+      const data = getTodoData(); const item = normalizeTodoTask({ title, description: args.description || "", priority: args.priority || "P3", dueDate: args.dueDate || null, reminderMinutes: args.reminderMinutes ?? 30, tags: args.tags || [] });
+      data.tasks.push(item); data.tags = normalizeStringList([...data.tags, ...(Array.isArray(args.tags) ? args.tags : [])]); saveTodoData(data); broadcastState();
+      results.push(`已新增${label("todo", item)}`); references.last_todo = { id: item.id, label: label("todo", item) }; continue;
+    }
+    if (call.name === "todo.list") {
+      const query = String(args.text || "").toLowerCase(); const tasks = getTodoData().tasks.filter(task => (!query || `${task.title} ${task.description}`.toLowerCase().includes(query)) && (args.completed == null || task.completed === args.completed) && (!args.dueDate || task.dueDate?.startsWith(args.dueDate)));
+      results.push(tasks.length ? tasks.slice(0, 10).map((task, index) => `${index + 1}. ${label("todo", task)}`).join("\n") : "没有找到匹配的待办。"); continue;
+    }
+    if (call.name === "todo.update" || call.name === "todo.complete") {
+      const id = resolveRef(args.taskId); const data = getTodoData(); const index = data.tasks.findIndex(task => task.id === id); if (index < 0) throw new Error("待办不存在或尚未被引用");
+      const patch = call.name === "todo.complete" ? { completed: args.completed !== false, completedAt: args.completed === false ? null : new Date().toISOString() } : (args.patch || {});
+      data.tasks[index] = normalizeTodoTask({ ...data.tasks[index], ...patch, id, createdAt: data.tasks[index].createdAt, updatedAt: new Date().toISOString() }); saveTodoData(data); broadcastState(); results.push(`已更新${label("todo", data.tasks[index])}`); continue;
+    }
+    if (call.name === "pomodoro.start") {
+      const data = getPomodoroData(); if (data.active) throw new Error("已有正在进行的专注任务"); const title = String(args.title || "").trim(); if (!title) throw new Error("专注缺少标题");
+      const minutes = Number(args.minutes); data.active = normalizePomodoroActive({ title, tags: args.tags || [], mode: minutes > 0 ? "countdown" : "countup", plannedSeconds: minutes > 0 ? minutes * 60 : null, startedAt: new Date().toISOString() }); data.tags = normalizeStringList([...data.tags, ...(args.tags || [])]); savePomodoroData(data); broadcastPomodoro(); results.push(`已开始专注「${title}」。`); continue;
+    }
+    if (call.name === "pomodoro.finish") { const before = getPomodoroData().active; if (!before) throw new Error("当前没有进行中的专注"); finishPomodoro(args.status === "abandoned" ? "abandoned" : "completed"); results.push(`已结束专注「${before.title}」。`); continue; }
+    if (call.name === "pomodoro.create_task") { const data = getPomodoroData(); const task = normalizePomodoroTask({ title: args.title, tags: args.tags || [], mode: Number(args.minutes) > 0 ? "countdown" : "countup", plannedSeconds: Number(args.minutes) * 60 }); if (!task.title) throw new Error("专注任务缺少标题"); data.tasks.unshift(task); data.tags = normalizeStringList([...data.tags, ...task.tags]); savePomodoroData(data); broadcastPomodoro(); results.push(`已新增专注任务「${task.title}」。`); continue; }
+    if (call.name === "finance.create") { const result = executeFeishuAction({ kind: "add", entity: "finance", patch: args }); results.push(result.text); if (result.references?.lastFinance) references.last_finance = result.references.lastFinance; continue; }
+    if (call.name === "finance.batch_create") { const entries = Array.isArray(args.entries) ? args.entries : []; if (!entries.length) throw new Error("批量记账缺少 entries"); const workflow = { kind: "workflow", steps: entries.map((entry, index) => ({ id: `entry_${index}`, action: "finance.create", data: entry })) }; const result = executeFinanceWorkflow(workflow); results.push(result.text); if (result.references?.lastFinance) references.last_finance = result.references.lastFinance; continue; }
+    if (call.name === "finance.summary") { results.push(financeMonthlySummary(args.month).text); continue; }
+    if (call.name === "finance.create_and_link_total") { const result = executeFinanceWorkflow({ kind: "workflow", steps: [{ id: "entry", action: "finance.create", data: args.entry || {} }, { id: "link", action: "finance.link_to_total", data: { financeRef: "$entry", totalName: args.totalName } }] }); results.push(result.text); if (result.references?.lastFinance) references.last_finance = result.references.lastFinance; continue; }
+    if (call.name === "finance.list") { const entries = getFinanceData().entries.filter(entry => (!args.month || entry.date.startsWith(args.month)) && (!args.tag || entry.tag === args.tag) && (!args.text || `${entry.tag} ${entry.note}`.includes(args.text))); results.push(entries.length ? entries.slice(0, 12).map((entry, index) => `${index + 1}. ${label("finance", entry)}`).join("\n") : "没有找到匹配的账单。"); continue; }
+    if (call.name === "finance.update") { const id = resolveRef(args.entryId); const result = applySelection({ entity: "finance", id }, args.patch || {}, "update"); results.push(result); continue; }
+    if (call.name === "total.create") { const result = executeFeishuAction({ kind: "add", entity: "total", patch: { name: args.name } }); results.push(result.text); continue; }
+    if (call.name === "total.link_bill") { const id = resolveRef(args.entryId); const data = getFinanceData(); const entry = data.entries.find(item => item.id === id); if (!entry) throw new Error("账单不存在或尚未被引用"); const project = findWorkflowTotalProject(data, args.totalName); if (!project.linkedEntryIds.includes(id)) project.linkedEntryIds.push(id); project.updatedAt = new Date().toISOString(); saveFinanceData(data); broadcastFinance(); results.push(`已将${label("finance", entry)}关联到${label("total", project)}。`); continue; }
+    if (call.name === "academic.schedule.query") { const courses = getScheduleData().courses.filter(course => !args.date || true); results.push(courses.length ? courses.slice(0, 20).map(course => `${course.name} · 周${course.weekday} 第${course.period}节${course.location ? ` · ${course.location}` : ""}`).join("\n") : "尚未导入课表。"); continue; }
+    if (call.name === "academic.exams.query") { const exams = getExamsData().exams.filter(exam => !args.date || exam.date === args.date); results.push(exams.length ? exams.slice(0, 20).map(exam => `${exam.date} · ${exam.name}${exam.time ? ` · ${exam.time}` : ""}${exam.location ? ` · ${exam.location}` : ""}`).join("\n") : "没有找到考试信息。"); continue; }
+    throw new Error(`未实现的助手工具：${call.name}`);
+  }
+  return { text: results.join("\n"), references: Object.keys(references).length ? references : null };
+}
 function executeFeishuAction(plan) {
   if (plan.kind === "undo_last") return { text: undoLast() };
   if (plan.kind === "undo-last-preview") return undoPreview();
+  if (plan.kind === "tool_calls") return executeAssistantToolCalls(plan.calls);
   if (plan.kind === "finance_summary") return financeMonthlySummary(plan.query?.month);
   if (plan.kind === "workflow") return executeFinanceWorkflow(plan);
   if (plan.kind === "find") { const found = candidates(plan.entity, plan.query); return found.length ? { candidates: found } : { text: "没有找到匹配的记录。" }; }

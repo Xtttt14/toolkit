@@ -24,7 +24,9 @@ function applyExplicitDates(plan, text) {
   return { ...plan, patch };
 }
 function buildPlannerPrompt(text, pending, history) {
-  return `你是个人工具箱的飞书命令解析器。只输出 JSON，不要 Markdown。
+  return `你是个人工具箱的飞书工具调用规划器。只输出 JSON，不要 Markdown。
+可调用工具目录（名称、用途、必填参数、参数类型）：${assistantToolProtocol()}
+优先把用户意图转换为工具调用，绝不把工具调用当成普通聊天。返回格式：{"kind":"tool_calls","calls":[{"name":"工具名","arguments":{}}]}。一条消息需要多个操作时，在 calls 中按执行顺序列出；后一步要引用本轮刚创建的账单或待办时使用 "$last_finance" 或 "$last_todo"。参数缺失、对象指代不唯一或金额语义有歧义时，返回 {"kind":"clarify","message":"只问一个最关键的问题"}，不得猜测。删除、导入文件、修改设置不在本轮可调用目录内，需明确说明限制。
 允许的实体 entity：todo、finance、total、water。允许的 kind：add、workflow、finance_summary、add_total_record、undo_last、find、select、link、chat、clarify、cancel。
 当用户在同一句中要求多个有先后依赖的记账动作，必须返回 kind="workflow"，不得只执行其中一步。workflow 的 steps 为 1-6 个步骤，每步格式为 {"id":"可选标识","action":"finance.create|finance.link_to_total|finance.update","data":{}}。finance.create 的 data 为 type、amount、tag、note、date/dates；finance.link_to_total 的 data 为 financeRef（引用前面步骤时写 "$步骤id"）和 totalName；finance.update 的 data 为 financeId（用户指“这笔/刚创建的账单”时写 "$last_finance"）和 patch。workflow 中先创建账单、再关联总计时，必须输出 create 和 link_to_total 两步；绝不能在总计中新增独立记录替代关联。
 add 仅新增；add_total_record 用于在已有总计项目内新增独立金额记录，不关联每日账单，query 用于查找总计项目、patch 填 amount/note/date。用户提供项目名时，query.text 必须填写该名称；系统会在唯一匹配时直接执行，只在多个匹配时询问选择。undo_last 只能用于用户明确说“刚刚/最近/上一条（次）”的撤回。用户要删除总计项目内某一条具体记录（不是最近N条）时，必须返回 kind="find"、entity="total"、operation="delete"，query.text 填记录名称或备注；系统会列出总计明细供选择，绝不能删除整个总计项目。除饮水撤回外，任何删除操作都会由系统展示删除对象并二次确认；不得声称已删除，除非用户已确认。用户说“删除/撤回这个刚刚/最近/上一条新增的独立记录”时，必须返回 undo_last，绝不能返回 add_total_record；用户明确说“删除某总计项目中最近N次直接/独立添加的记录”时，必须删除该项目最近N条独立记录；find 用于查找后修改或撤回；select 用于用户在候选结果中选择后更新或撤回；link 用于把一笔账单关联到一个总计项目；chat 用于只读提问、总结和普通对话。
@@ -37,9 +39,13 @@ add 仅新增；add_total_record 用于在已有总计项目内新增独立金�
 }
 
 function validatePlan(plan) {
-  const kinds = new Set(["add", "workflow", "finance_summary", "add_and_link_finance", "update_recent_finance", "add_total_record", "undo_last", "find", "select", "link", "chat", "clarify", "cancel"]);
+  const kinds = new Set(["tool_calls", "add", "workflow", "finance_summary", "add_and_link_finance", "update_recent_finance", "add_total_record", "undo_last", "find", "select", "link", "chat", "clarify", "cancel"]);
   const entities = new Set(["todo", "finance", "total", "water"]);
   if (!plan || typeof plan !== "object" || !kinds.has(plan.kind)) throw new Error("DeepSeek 返回了无效命令");
+  if (plan.kind === "tool_calls") {
+    if (!Array.isArray(plan.calls) || !plan.calls.length || plan.calls.length > 8 || plan.calls.some(call => !call || !ASSISTANT_TOOL_NAMES.has(call.name) || !call.arguments || typeof call.arguments !== "object")) throw new Error("DeepSeek 返回了无效工具调用");
+    return { kind: "tool_calls", calls: plan.calls.map(call => ({ name: call.name, arguments: call.arguments })) };
+  }
   if (plan.kind === "workflow") {
     const actions = new Set(["finance.create", "finance.link_to_total", "finance.update"]);
     if (!Array.isArray(plan.steps) || !plan.steps.length || plan.steps.length > 6 || plan.steps.some(step => !step || !actions.has(step.action) || typeof step.data !== "object")) throw new Error("DeepSeek 返回了无效工作流");
@@ -86,7 +92,7 @@ async function planWithDeepSeek(text, pending, history, apiKey) {
       thinking: { type: "disabled" },
       response_format: { type: "json_object" },
       max_tokens: 600,
-      messages: [{ role: "system", content: buildPlannerPrompt(text, pending, history) }]
+      messages: [{ role: "system", content: buildPlannerPrompt("", pending, history) }, { role: "user", content: String(text || "") }]
     })
   });
   if (!response.ok) throw new Error(`DeepSeek 请求失败：${response.status} ${await response.text()}`);
@@ -219,7 +225,8 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
     runtimeLoaded.add(openId);
     const runtime = onRuntimeLoad?.(openId) || {}; const presented = runtime.presentedCandidates;
     if (presented?.expiresAt > Date.now() && Array.isArray(presented.items)) presentedCandidatesByUser.set(openId, presented);
-    if (runtime.references?.lastFinance?.expiresAt > Date.now()) referencesByUser.set(openId, runtime.references);
+    const refs = runtime.references;
+    if (refs && Object.values(refs).some(ref => ref?.expiresAt == null || ref.expiresAt > Date.now())) referencesByUser.set(openId, refs);
   };
   const saveRuntime = openId => onRuntimeSave?.(openId, { presentedCandidates: presentedCandidatesByUser.get(openId) || null, references: referencesByUser.get(openId) || null });
   const rememberPresentedCandidates = (openId, items) => {
@@ -237,8 +244,9 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
     if (!references) return; loadRuntime(openId); referencesByUser.set(openId, references); saveRuntime(openId);
   };
   const bindWorkflowReferences = (plan, openId) => {
+    const references = referencesByUser.get(openId) || {}; const lastFinanceId = references.last_finance?.id || references.lastFinance?.id; const lastTodoId = references.last_todo?.id;
+    if (plan.kind === "tool_calls") return { ...plan, calls: plan.calls.map(call => ({ ...call, arguments: { ...call.arguments, entryId: call.arguments?.entryId === "$last_finance" ? lastFinanceId : call.arguments?.entryId, taskId: call.arguments?.taskId === "$last_todo" ? lastTodoId : call.arguments?.taskId } })) };
     if (plan.kind !== "workflow") return plan;
-    const lastFinanceId = referencesByUser.get(openId)?.lastFinance?.id;
     return { ...plan, steps: plan.steps.map(step => ({ ...step, data: { ...step.data, financeId: step.data?.financeId === "$last_finance" ? lastFinanceId : step.data?.financeId, financeRef: step.data?.financeRef === "$last_finance" ? lastFinanceId : step.data?.financeRef } })) };
   };
   const rememberConversation = (openId, role, text) => {
@@ -278,7 +286,12 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
       const pending = pendingByUser.get(openId) || null;
       rememberConversation(openId, "user", text);
       const plannerContext = { pending: pending?.summary || null, presented: presentedCandidates(openId).map((item, index) => ({ index: index + 1, label: item.label })), references: referencesByUser.get(openId) || null };
-      const planned = applyExplicitDates(parseNaturalFinanceSummary(text) || parseNaturalWaterCommand(text) || parseTodoAddition(text) || parseNaturalFinanceCommand(text) || await planWithDeepSeek(text, plannerContext, conversationByUser.get(openId)?.slice(-48), deepSeekApiKey), text);
+      const fallback = parseNaturalFinanceSummary(text) || parseNaturalWaterCommand(text) || parseTodoAddition(text) || parseNaturalFinanceCommand(text);
+      let planned;
+      try { planned = await planWithDeepSeek(text, plannerContext, conversationByUser.get(openId)?.slice(-48), deepSeekApiKey); }
+      catch (error) { if (!fallback) throw error; planned = fallback; }
+      if (planned.kind !== "tool_calls" && fallback) planned = fallback;
+      planned = applyExplicitDates(planned, text);
       const plan = bindWorkflowReferences(planned, openId);
       if (pending && (plan.kind === "cancel" || isCancellation(text))) {
         pendingByUser.delete(openId);
@@ -332,7 +345,7 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
       if (!pending && isRecentUndoRequest(text)) {
         return void await requestUndo(messageId, openId);
       }
-      if (isReadOnlyQuestion(text)) {
+      if (isReadOnlyQuestion(text) && plan.kind === "chat") {
         pendingByUser.delete(openId);
         return void await reply(messageId, await answerWithDeepSeek(text, onChatContext?.() || {}, deepSeekApiKey), openId);
       }
@@ -413,3 +426,4 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
 }
 
 module.exports = { answerWithDeepSeek, applyExplicitDates, buildPlannerPrompt, chineseCount, extractExplicitDates, isCancellation, isReadOnlyQuestion, isRecentUndoRequest, parseLinkSelection, parseListedRecordDeletion, parseNaturalFinanceCommand, parseNaturalFinanceSummary, parseNaturalWaterCommand, parseRecentTotalRecordDeletion, parseSingleSelection, parseTodoAddition, parseTotalRecordDeletion, parseTotalRecordListRequest, planWithDeepSeek, startFeishuBridge, validatePlan };
+const { ASSISTANT_TOOL_NAMES, assistantToolProtocol } = require("./assistant-tools");
