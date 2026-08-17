@@ -27,4 +27,7 @@ const ASSISTANT_TOOL_NAMES = new Set(ASSISTANT_TOOLS.map(tool => tool.name));
 function assistantToolProtocol() {
   return JSON.stringify(ASSISTANT_TOOLS);
 }
-module.exports = { ASSISTANT_TOOLS, ASSISTANT_TOOL_NAMES, assistantToolProtocol };
+function normalizeMathExpression(value) {
+  return String(value ?? "").replace(/（/g, "(").replace(/）/g, ")").trim();
+}
+module.exports = { ASSISTANT_TOOLS, ASSISTANT_TOOL_NAMES, assistantToolProtocol, normalizeMathExpression };

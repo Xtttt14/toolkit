@@ -6,6 +6,7 @@ const Store = require("electron-store");
 const { autoUpdater } = require("electron-updater");
 const { getWaterReminderDueAt, safeMinutes } = require("./water-reminder");
 const { parseSchedule, parseExams } = require("./academic-parser");
+const { normalizeMathExpression } = require("./assistant-tools");
 const { startFeishuBridge } = require("./feishu-bridge");
 
 const isDev = !app.isPackaged;
@@ -854,7 +855,7 @@ function financeMonthlySummary(month) {
 }
 function resolveAssistantAmount(value) {
   if (typeof value === "number") return value;
-  const expression = String(value ?? "").trim();
+  const expression = normalizeMathExpression(value);
   if (!expression || !/^[\d\s+\-*/().]+$/.test(expression)) throw new Error("金额必须是数字或仅包含加减乘除和括号的算式");
   // 先限制字符集，再执行纯算术表达式；不允许变量、属性访问或函数调用。
   const result = Function(`"use strict"; return (${expression});`)();
