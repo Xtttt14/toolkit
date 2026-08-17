@@ -33,8 +33,15 @@ function buildPlannerPrompt(text, pending, history) {
 金额出现算式时，先调用 math.calculate，并给 resultKey；后续账单 amount 使用 "$resultKey"。中文括号和英文括号都可传给 math.calculate。用户说“16号/16日”时，账单 date 使用本地日期所属年月的 16 日。午餐、晚餐等餐饮默认使用“三餐”标签。
 参数缺失、对象指代不唯一、金额含义不能确定时，输出 clarify；不要猜测，不要把写入请求改成待办/聊天查询。
 当前本地日期是 ${dateKey(new Date())}。
-当前候选会话：${JSON.stringify(pending || null)}
-最近对话：${JSON.stringify(history || [])}`;
+当前候选会话：${JSON.stringify(pending || null)}`;
+}
+
+function isRelevantClarification(message, text) {
+  const question = String(message || ""); const input = String(text || "");
+  if (/(删除|删掉|撤回)/.test(question) && !/(删除|删掉|撤回|取消)/.test(input)) return false;
+  if (/待办/.test(question) && !/(待办|任务|todo)/i.test(input)) return false;
+  if (/(消费|计入|支出|收入|记账|账单)/.test(input) && !/(金额|账|消费|支出|收入|日期|平摊|计算|分类|标签)/.test(question)) return false;
+  return true;
 }
 
 function validatePlan(plan) {
@@ -103,6 +110,7 @@ async function planWithDeepSeek(text, pending, history, apiKey) {
   const parseToolPlan = raw => {
     try {
       const plan = applyExplicitDates(validatePlan(JSON.parse(raw)), text);
+      if (plan.kind === "clarify" && !isRelevantClarification(plan.message, text)) return null;
       return ["tool_calls", "clarify"].includes(plan.kind) ? plan : null;
     } catch { return null; }
   };
@@ -437,5 +445,5 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
   return { started: true };
 }
 
-module.exports = { answerWithDeepSeek, applyExplicitDates, buildPlannerPrompt, chineseCount, extractExplicitDates, isCancellation, isReadOnlyQuestion, isRecentUndoRequest, parseLinkSelection, parseListedRecordDeletion, parseNaturalFinanceCommand, parseNaturalFinanceSummary, parseNaturalWaterCommand, parseRecentTotalRecordDeletion, parseSingleSelection, parseTodoAddition, parseTotalRecordDeletion, parseTotalRecordListRequest, planWithDeepSeek, startFeishuBridge, validatePlan };
+module.exports = { answerWithDeepSeek, applyExplicitDates, buildPlannerPrompt, chineseCount, extractExplicitDates, isCancellation, isReadOnlyQuestion, isRecentUndoRequest, isRelevantClarification, parseLinkSelection, parseListedRecordDeletion, parseNaturalFinanceCommand, parseNaturalFinanceSummary, parseNaturalWaterCommand, parseRecentTotalRecordDeletion, parseSingleSelection, parseTodoAddition, parseTotalRecordDeletion, parseTotalRecordListRequest, planWithDeepSeek, startFeishuBridge, validatePlan };
 const { ASSISTANT_TOOL_NAMES, assistantToolProtocol } = require("./assistant-tools");

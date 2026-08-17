@@ -1,5 +1,5 @@
 const assert = require("assert");
-const { applyExplicitDates, parseListedRecordDeletion, parseNaturalFinanceCommand, parseNaturalFinanceSummary, parseNaturalWaterCommand, parseTodoAddition, validatePlan } = require("../electron/feishu-bridge");
+const { applyExplicitDates, isRelevantClarification, parseListedRecordDeletion, parseNaturalFinanceCommand, parseNaturalFinanceSummary, parseNaturalWaterCommand, parseTodoAddition, validatePlan } = require("../electron/feishu-bridge");
 const { ASSISTANT_TOOL_NAMES, normalizeMathExpression } = require("../electron/assistant-tools");
 
 const createAndLink = parseNaturalFinanceCommand("增加一笔记账，娱乐，59.9元，备注265张25cm生态纸+8张21cm棉箔纸，同时把这个账单关联到折纸总计项目中");
@@ -33,4 +33,6 @@ assert.throws(() => validatePlan({ kind: "tool_calls", calls: [{ name: "system.d
 assert.equal(validatePlan({ kind: "clarify", message: "请补充金额" }).kind, "clarify");
 assert.equal(parseListedRecordDeletion("删掉1."), 1);
 assert.equal(normalizeMathExpression("（123 + 28） / 3"), "(123 + 28) / 3");
+assert.equal(isRelevantClarification("请问要删除哪一项待办？", "16号计入消费"), false);
+assert.equal(isRelevantClarification("三笔消费是否都按列出的金额入账？", "16号计入消费"), true);
 console.log("飞书多步骤记账工作流检查通过。");
