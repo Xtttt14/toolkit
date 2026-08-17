@@ -32,6 +32,7 @@ function buildPlannerPrompt(text, pending, history) {
 3. {"kind":"final","message":"基于真实工具结果给用户的简洁答复"}。只有已经拿到工具结果或用户纯聊天时才可输出 final。
 只要用户请求查看、记录、修改或执行工具箱能力，必须输出 tool_calls，绝不能输出聊天回答或旧版 kind/entity/workflow 格式。多条编号消费、多个待办或多个连续动作必须保留为多个条目或多个 calls，按顺序执行，不能只处理第一条。
 金额出现算式时，先调用 math.calculate，并给 resultKey；后续账单 amount 使用 "$resultKey"。中文括号和英文括号都可传给 math.calculate。用户说“16号/16日”时，账单 date 使用本地日期所属年月的 16 日。午餐、晚餐等餐饮默认使用“三餐”标签。
+用户写“8.16”或“8月16日”时，账单 date 使用当前年份的 08-16。
 参数缺失、对象指代不唯一、金额含义不能确定时，输出 clarify；不要猜测，不要把写入请求改成待办/聊天查询。
 当前本地日期是 ${dateKey(new Date())}。
 当前候选会话：${JSON.stringify(pending || null)}`;

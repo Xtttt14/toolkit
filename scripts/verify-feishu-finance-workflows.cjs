@@ -42,5 +42,24 @@ assert.equal(isRelevantClarification("三笔消费是否都按列出的金额入
   const agent = new ToolAgent({ apiKey: "test", model: "test", registry: new ToolRegistry({ tools: [], execute: async () => ({ text: "饮水200ml", references: null }) }), validatePlan, systemPrompt: () => "test", fetchImpl: fakeFetch });
   const result = await agent.run("加一杯水");
   assert.equal(result.text, "已记录一杯水。");
+
+  let repairCalls = 0;
+  let executeCalls = 0;
+  const repairedFetch = async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify([
+    { kind: "final", message: "请问您需要我做什么？" },
+    { kind: "tool_calls", calls: [{ name: "water.add", arguments: {} }] },
+    { kind: "final", message: "已新增一杯水。" }
+  ][repairCalls++]) } }] }) });
+  const repairedAgent = new ToolAgent({
+    apiKey: "test",
+    model: "test",
+    registry: new ToolRegistry({ tools: [], execute: async () => { executeCalls += 1; return { text: "饮水200ml" }; } }),
+    validatePlan,
+    systemPrompt: () => "test",
+    fetchImpl: repairedFetch
+  });
+  const repairedResult = await repairedAgent.run("给我加一杯水");
+  assert.equal(executeCalls, 1);
+  assert.equal(repairedResult.text, "已新增一杯水。");
   console.log("飞书多步骤记账工作流检查通过。");
 })().catch(error => { console.error(error); process.exitCode = 1; });
