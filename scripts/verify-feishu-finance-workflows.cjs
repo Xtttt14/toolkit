@@ -1,7 +1,7 @@
 const assert = require("assert");
 const { applyExplicitDates, isRelevantClarification, parseListedRecordDeletion, parseNaturalFinanceCommand, parseNaturalFinanceSummary, parseNaturalWaterCommand, parseTodoAddition, validatePlan } = require("../electron/feishu-bridge");
 const { ASSISTANT_TOOL_NAMES, normalizeMathExpression } = require("../electron/assistant-tools");
-const { ToolAgent, ToolRegistry } = require("../electron/tool-agent");
+const { ToolAgent, ToolRegistry, acceptsFirstTurnClarification } = require("../electron/tool-agent");
 
 const createAndLink = parseNaturalFinanceCommand("增加一笔记账，娱乐，59.9元，备注265张25cm生态纸+8张21cm棉箔纸，同时把这个账单关联到折纸总计项目中");
 assert.equal(createAndLink.kind, "workflow");
@@ -36,6 +36,9 @@ assert.equal(parseListedRecordDeletion("删掉1."), 1);
 assert.equal(normalizeMathExpression("（123 + 28） / 3"), "(123 + 28) / 3");
 assert.equal(isRelevantClarification("请问要删除哪一项待办？", "16号计入消费"), false);
 assert.equal(isRelevantClarification("三笔消费是否都按列出的金额入账？", "16号计入消费"), true);
+assert.equal(acceptsFirstTurnClarification("给8.16计入消费", "你好，我可以帮你记录饮水、待办、专注、账单和课表等，请告诉我你想做什么。"), false);
+assert.equal(acceptsFirstTurnClarification("加入todo", "请问有什么可以帮您？"), false);
+assert.equal(acceptsFirstTurnClarification("记一笔消费", "请补充金额。"), true);
 (async () => {
   let agentCalls = 0;
   const fakeFetch = async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: agentCalls++ === 0 ? JSON.stringify({ kind: "tool_calls", calls: [{ name: "water.add", arguments: {} }] }) : JSON.stringify({ kind: "final", message: "已记录一杯水。" }) } }] }) });
@@ -61,5 +64,20 @@ assert.equal(isRelevantClarification("三笔消费是否都按列出的金额入
   const repairedResult = await repairedAgent.run("给我加一杯水");
   assert.equal(executeCalls, 1);
   assert.equal(repairedResult.text, "已新增一杯水。");
+
+  let batchCalls = 0;
+  let batchExecutions = 0;
+  const batchFetch = async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify([
+    { kind: "clarify", message: "你好，我可以帮你记录饮水、待办、专注、账单和课表等，请告诉我你想做什么。" },
+    { kind: "tool_calls", calls: [{ name: "finance.batch_create", arguments: { entries: [{ amount: 92.67 }, { amount: 50.33 }, { amount: 96 }] } }] },
+    { kind: "final", message: "已新增 3 笔消费。" }
+  ][batchCalls++]) } }] }) });
+  const batchAgent = new ToolAgent({
+    apiKey: "test", model: "test", validatePlan, systemPrompt: () => "test", fetchImpl: batchFetch,
+    registry: new ToolRegistry({ tools: [], execute: async plan => { batchExecutions += 1; assert.equal(plan.calls[0].name, "finance.batch_create"); return { text: "已新增 3 笔消费。" }; } })
+  });
+  const batchResult = await batchAgent.run("给8.16计入消费\n1. 午餐，咕咕煲，消费278/3\n2. 娱乐，ps5体验店，消费（123+28）/3\n3. 晚餐，椰子鸡，消费96");
+  assert.equal(batchExecutions, 1);
+  assert.equal(batchResult.text, "已新增 3 笔消费。");
   console.log("飞书多步骤记账工作流检查通过。");
 })().catch(error => { console.error(error); process.exitCode = 1; });
