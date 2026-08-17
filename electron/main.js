@@ -865,6 +865,60 @@ function resolveAssistantAmount(value) {
 function materializeAssistantFinanceEntry(entry = {}, resolve = value => value) {
   return { ...entry, amount: resolveAssistantAmount(resolve(entry.amount ?? entry.amount_expression)) };
 }
+function normalizeAssistantFinanceDate(value) {
+  const match = String(value || "").match(/(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  return match ? `${match[1]}-${String(match[2]).padStart(2, "0")}-${String(match[3]).padStart(2, "0")}` : null;
+}
+function normalizeAssistantFinancePatch(patch = {}) {
+  const next = { ...patch };
+  if (next.date != null) {
+    const fullDate = normalizeAssistantFinanceDate(next.date);
+    const shortDate = String(next.date).match(/^(\d{1,2})[-/.](\d{1,2})$/);
+    const resolved = fullDate || (shortDate ? makeDate(new Date().getFullYear(), Number(shortDate[1]), Number(shortDate[2])) : null);
+    if (!resolved) throw new Error("账单日期必须是 YYYY-MM-DD 或 M-D");
+    next.date = resolved;
+  }
+  return next;
+}
+function normalizeAssistantFinanceQuery(raw = {}) {
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) return {
+    text: String(raw.text || "").trim(), amount: raw.amount == null || raw.amount === "" ? null : Number(raw.amount),
+    date: normalizeAssistantFinanceDate(raw.date), tag: String(raw.tag || "").trim()
+  };
+  const value = String(raw || "").trim();
+  const date = normalizeAssistantFinanceDate(value);
+  const amount = value.match(/(?:金额\s*)?(\d+(?:\.\d+)?)\s*(?:元|块)/)?.[1];
+  const text = value
+    .replace(/\d{4}[-/.]\d{1,2}[-/.]\d{1,2}/g, " ")
+    .replace(/(?:金额\s*)?\d+(?:\.\d+)?\s*(?:元|块)/g, " ")
+    .replace(/(?:修改|更改|改成|改为|设置|这笔|账单|日期|金额|标签|分类|为|是)/g, " ")
+    .replace(/[（）()【】\[\]，,。；;：:]/g, " ").replace(/\s+/g, " ").trim();
+  return { text, amount: amount == null ? null : Number(amount), date, tag: "" };
+}
+function findAssistantFinanceEntries(query = {}) {
+  const normalized = normalizeAssistantFinanceQuery(query);
+  if (normalized.amount != null && !Number.isFinite(normalized.amount)) return [];
+  const terms = normalized.text.toLowerCase().split(/\s+/).filter(Boolean);
+  return getFinanceData().entries.filter(entry => {
+    const haystack = `${entry.tag} ${entry.note}`.toLowerCase();
+    return (!terms.length || terms.every(term => haystack.includes(term)))
+      && (normalized.amount == null || Number(entry.amount) === normalized.amount)
+      && (!normalized.date || entry.date === normalized.date)
+      && (!normalized.tag || entry.tag === normalized.tag);
+  });
+}
+function assistantFinanceCandidates(entries) {
+  return entries.slice(0, 8).map(entry => ({ entity: "finance", id: entry.id, label: label("finance", entry) }));
+}
+function resolveAssistantFinanceTarget(args = {}, resolveRef = value => value) {
+  const requested = resolveRef(args.entryId);
+  const data = getFinanceData();
+  const direct = data.entries.find(entry => entry.id === requested);
+  if (direct) return { entry: direct };
+  const query = args.match && typeof args.match === "object" ? args.match : requested;
+  const matched = findAssistantFinanceEntries(query);
+  return matched.length === 1 ? { entry: matched[0] } : { candidates: assistantFinanceCandidates(matched), query: normalizeAssistantFinanceQuery(query) };
+}
 function executeAssistantToolCalls(calls) {
   const results = []; const references = {}; let candidates = null;
   const resolveRef = value => typeof value === "string" && value.startsWith("$") ? references[value.slice(1)]?.value ?? references[value.slice(1)]?.id ?? value : value;
@@ -907,8 +961,21 @@ function executeAssistantToolCalls(calls) {
     if (call.name === "finance.batch_create") { const entries = Array.isArray(args.entries) ? args.entries : []; if (!entries.length) throw new Error("批量记账缺少 entries"); const workflow = { kind: "workflow", steps: entries.map((entry, index) => ({ id: `entry_${index}`, action: "finance.create", data: materializeAssistantFinanceEntry(entry, resolveRef) })) }; const result = executeFinanceWorkflow(workflow); results.push(result.text); if (result.references?.lastFinance) references.last_finance = result.references.lastFinance; continue; }
     if (call.name === "finance.summary") { results.push(financeMonthlySummary(args.month).text); continue; }
     if (call.name === "finance.create_and_link_total") { const result = executeFinanceWorkflow({ kind: "workflow", steps: [{ id: "entry", action: "finance.create", data: materializeAssistantFinanceEntry(args.entry || {}, resolveRef) }, { id: "link", action: "finance.link_to_total", data: { financeRef: "$entry", totalName: args.totalName } }] }); results.push(result.text); if (result.references?.lastFinance) references.last_finance = result.references.lastFinance; continue; }
-    if (call.name === "finance.list") { const entries = getFinanceData().entries.filter(entry => (!args.month || entry.date.startsWith(args.month)) && (!args.tag || entry.tag === args.tag) && (!args.text || `${entry.tag} ${entry.note}`.includes(args.text))); results.push(entries.length ? entries.slice(0, 12).map((entry, index) => `${index + 1}. ${label("finance", entry)}`).join("\n") : "没有找到匹配的账单。"); continue; }
-    if (call.name === "finance.update") { const id = resolveRef(args.entryId); const result = applySelection({ entity: "finance", id }, args.patch || {}, "update"); results.push(result); continue; }
+    if (call.name === "finance.list") {
+      const entries = findAssistantFinanceEntries({ text: args.text, amount: args.amount, date: args.date, tag: args.tag, month: args.month })
+        .filter(entry => !args.month || entry.date.startsWith(args.month));
+      const matches = assistantFinanceCandidates(entries); references.finance_matches = matches;
+      results.push(matches.length ? matches.map((entry, index) => `${index + 1}. ${entry.label}（ID: ${entry.id}）`).join("\n") : "没有找到匹配的账单。"); continue;
+    }
+    if (call.name === "finance.update") {
+      const target = resolveAssistantFinanceTarget(args, resolveRef);
+      if (!target.entry) {
+        candidates = target.candidates;
+        results.push(candidates.length ? "找到多笔可能的账单，尚未修改；请让用户选择具体一笔。" : "没有找到匹配的账单，尚未修改；请让用户补充金额、日期或备注。");
+        continue;
+      }
+      const result = applySelection({ entity: "finance", id: target.entry.id }, normalizeAssistantFinancePatch(args.patch || {}), "update"); results.push(result); continue;
+    }
     if (call.name === "total.create") { const result = executeFeishuAction({ kind: "add", entity: "total", patch: { name: args.name } }); results.push(result.text); continue; }
     if (call.name === "total.link_bill") { const id = resolveRef(args.entryId); const data = getFinanceData(); const entry = data.entries.find(item => item.id === id); if (!entry) throw new Error("账单不存在或尚未被引用"); const project = findWorkflowTotalProject(data, args.totalName); if (!project.linkedEntryIds.includes(id)) project.linkedEntryIds.push(id); project.updatedAt = new Date().toISOString(); saveFinanceData(data); broadcastFinance(); results.push(`已将${label("finance", entry)}关联到${label("total", project)}。`); continue; }
     if (call.name === "academic.schedule.query") { const courses = getScheduleData().courses.filter(course => !args.date || true); results.push(courses.length ? courses.slice(0, 20).map(course => `${course.name} · 周${course.weekday} 第${course.period}节${course.location ? ` · ${course.location}` : ""}`).join("\n") : "尚未导入课表。"); continue; }
