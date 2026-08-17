@@ -1,0 +1,14 @@
+description: 飞书多任务Agent无副作用链路评测
+prompts:
+  - "{{message}}"
+providers:
+  - id: file://./evals/feishu/agent-provider.cjs
+    config:
+      model: deepseek-v4-flash
+      maxTokens: 3000
+      maxIterations: 5
+tests: file://./evals/feishu/multitask-cases.yaml
+defaultTest:
+  assert:
+    - type: javascript
+      value: file://./evals/feishu/assert-agent.cjs

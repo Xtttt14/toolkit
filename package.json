@@ -1,6 +1,6 @@
 {
   "name": "personal-toolbox",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "private": true,
   "description": "个人本地工具箱 - 饮水提醒 · 待办清单 · 番茄钟 · 记账助手",
   "main": "electron/main.js",
@@ -10,6 +10,10 @@
     "start": "concurrently -k \"npm run dev\" \"wait-on http://127.0.0.1:8000 && electron .\"",
     "test:async-state": "node scripts/verify-async-state-updates.cjs",
     "test:feishu-workflows": "node scripts/verify-feishu-finance-workflows.cjs",
+    "test:feishu-agent": "node scripts/verify-feishu-agent.cjs",
+    "eval:feishu-planner": "cross-env PROMPTFOO_CONFIG_DIR=.promptfoo promptfoo eval -c promptfooconfig.planner.yaml --no-cache",
+    "eval:feishu-agent": "cross-env PROMPTFOO_CONFIG_DIR=.promptfoo promptfoo eval -c promptfooconfig.agent.yaml --no-cache",
+    "eval:feishu": "npm run eval:feishu-planner && npm run eval:feishu-agent",
     "test:water-reminder": "node scripts/verify-water-reminder.cjs",
     "build": "vite build --configLoader runner",
     "dist": "npm run build && electron-builder --win nsis --publish never",
@@ -29,8 +33,10 @@
   },
   "devDependencies": {
     "concurrently": "^9.1.0",
+    "cross-env": "^10.1.0",
     "electron": "^33.2.1",
     "electron-builder": "^25.1.8",
+    "promptfoo": "^0.122.0",
     "vite": "^6.0.3",
     "wait-on": "^8.0.1"
   },

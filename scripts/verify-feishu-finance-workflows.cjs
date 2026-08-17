@@ -1,5 +1,5 @@
 const assert = require("assert");
-const { applyExplicitDates, isRelevantClarification, parseListedRecordDeletion, parseNaturalFinanceCommand, parseNaturalFinanceSummary, parseNaturalWaterCommand, parseTodoAddition, validatePlan } = require("../electron/feishu-bridge");
+const { applyExplicitDates, isRelevantClarification, parseListedRecordDeletion, parseNaturalFinanceCommand, parseNaturalFinanceSummary, parseNaturalWaterCommand, parseNaturalWaterTime, parseTodoAddition, validatePlan } = require("../electron/feishu-bridge");
 const { ASSISTANT_TOOL_NAMES, normalizeMathExpression } = require("../electron/assistant-tools");
 const { ToolAgent, ToolRegistry, acceptsFirstTurnClarification } = require("../electron/tool-agent");
 
@@ -23,6 +23,9 @@ const dated = applyExplicitDates(parseNaturalFinanceCommand("8月15日增加一�
 assert.equal(dated.steps[0].data.date, "2026-08-15");
 assert.deepEqual(parseNaturalWaterCommand("加一杯水"), { kind: "add", entity: "water", patch: {} });
 assert.deepEqual(parseNaturalWaterCommand("喝了300ml水"), { kind: "add", entity: "water", patch: { ml: 300 } });
+assert.deepEqual(parseNaturalWaterCommand("10点加200ml水"), { kind: "add", entity: "water", patch: { ml: 200, time: "10:00" } });
+assert.equal(parseNaturalWaterTime("下午3点半喝水"), "15:30");
+assert.equal(parseNaturalWaterTime("晚上 9:05 喝水"), "21:05");
 assert.equal(parseNaturalWaterCommand("增加一笔娱乐记账，59.9元"), null);
 assert.deepEqual(parseTodoAddition("加一个待办，简单意图评估创建"), { kind: "add", entity: "todo", patch: { title: "简单意图评估创建" } });
 assert.deepEqual(parseTodoAddition("加一个待办，简单意图评估集创建，优先级为P0"), { kind: "add", entity: "todo", patch: { title: "简单意图评估集创建", priority: "P0" } });

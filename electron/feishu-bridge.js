@@ -1,7 +1,12 @@
+const { DEEPSEEK_MAX_TOKENS, DEEPSEEK_MODEL } = require("./deepseek-config");
+const { requestDeepSeekCompletion } = require("./deepseek-client");
+const { extractFeishuMessageText } = require("./feishu-message");
+
 function dateKey(date) {
   const y = date.getFullYear(); const m = String(date.getMonth() + 1).padStart(2, "0"); const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 }
+
 function makeDate(year, month, day) {
   const date = new Date(year, month - 1, day, 12); return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day ? dateKey(date) : null;
 }
@@ -75,39 +80,20 @@ function validatePlan(plan) {
 }
 
 async function answerWithDeepSeek(text, context, apiKey) {
-  const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: "deepseek-v4-pro",
-      thinking: { type: "disabled" },
-      max_tokens: 1000,
-      messages: [
-        { role: "system", content: "你是个人工具箱的只读聊天助手。只根据提供的工具箱数据回答；数据不足时明确说明。不得建议或声称已修改数据。总计项目的 records 已合并直接添加和关联账单，source 字段表示来源，并已按日期和创建时间倒序排列。回答简洁、使用中文。\n\n工具箱数据：\n" + JSON.stringify(context) },
-        { role: "user", content: String(text || "") }
-      ]
-    })
+  const response = await requestDeepSeekCompletion({
+    apiKey,
+    messages: [
+      { role: "system", content: "你是个人工具箱的只读聊天助手。只根据提供的工具箱数据回答；数据不足时明确说明。不得建议或声称已修改数据。总计项目的 records 已合并直接添加和关联账单，source 字段表示来源，并已按日期和创建时间倒序排列。回答简洁、使用中文。\n\n工具箱数据：\n" + JSON.stringify(context) },
+      { role: "user", content: String(text || "") }
+    ]
   });
-  if (!response.ok) throw new Error(`DeepSeek 聊天请求失败：${response.status} ${await response.text()}`);
-  const body = await response.json();
-  return String(body.choices?.[0]?.message?.content || "暂时无法生成回答。").trim();
+  return response.content || "暂时无法生成回答。";
 }
 
 async function planWithDeepSeek(text, pending, history, apiKey) {
   const requestPlan = async messages => {
-    const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: "deepseek-v4-pro",
-      thinking: { type: "disabled" },
-      response_format: { type: "json_object" },
-      max_tokens: 600,
-      messages
-    })
-    });
-    if (!response.ok) throw new Error(`DeepSeek 请求失败：${response.status} ${await response.text()}`);
-    const body = await response.json(); return String(body.choices?.[0]?.message?.content || "");
+    const response = await requestDeepSeekCompletion({ apiKey, messages, json: true });
+    return response.content;
   };
   const system = buildPlannerPrompt("", pending, history);
   const first = await requestPlan([{ role: "system", content: system }, { role: "user", content: String(text || "") }]);
@@ -210,7 +196,21 @@ function parseNaturalWaterCommand(text) {
   // 饮水是独立领域动作，必须在记账/模型规划前路由，不能把“杯”误解释为金额或分类。
   if (!/(?:加|喝|饮|记录).{0,8}(?:杯|瓶|毫升|ml)?\s*水|水\s*(?:一|两|\d+)?\s*(?:杯|瓶)/i.test(value)) return null;
   const ml = value.match(/(\d{2,4})\s*(?:毫升|ml)/i)?.[1];
-  return { kind: "add", entity: "water", patch: ml ? { ml: Number(ml) } : {} };
+  const time = parseNaturalWaterTime(value);
+  return { kind: "add", entity: "water", patch: { ...(ml ? { ml: Number(ml) } : {}), ...(time ? { time } : {}) } };
+}
+
+function parseNaturalWaterTime(text) {
+  const match = String(text || "").match(/(?:(上午|早上|凌晨|中午|下午|晚上|傍晚|晚)\s*)?(\d{1,2})\s*(?:(?:点|时)(?:(半)|(\d{1,2})\s*(?:分)?)?|[:：]\s*(\d{1,2}))/);
+  if (!match) return null;
+  const period = match[1] || "";
+  let hour = Number(match[2]);
+  const minute = match[3] ? 30 : Number(match[4] || match[5] || 0);
+  if (minute > 59 || hour > 23) return null;
+  if (/^(下午|晚上|傍晚|晚)$/.test(period) && hour < 12) hour += 12;
+  if (period === "中午" && hour < 11) hour += 12;
+  if (period === "凌晨" && hour === 12) hour = 0;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
 function parseTodoAddition(text) {
@@ -240,7 +240,6 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
   const client = new Lark.Client({ appId, appSecret });
   const toolAgent = new ToolAgent({
     apiKey: deepSeekApiKey,
-    model: "deepseek-v4-pro",
     registry: new ToolRegistry({ tools: require("./assistant-tools").ASSISTANT_TOOLS, execute: onAction }),
     validatePlan,
     systemPrompt: (_tools, context) => buildPlannerPrompt("", context?.pending || null, []),
@@ -314,8 +313,11 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
     if (inFlight.has(messageId)) return;
     inFlight.add(messageId);
     try {
-      const text = JSON.parse(data.message.content || "{}").text || "";
+      const text = extractFeishuMessageText(data.message);
       const pending = pendingByUser.get(openId) || null;
+      if (!text) {
+        return void await reply(messageId, "这条消息中没有可处理的文字。请发送文本或富文本消息后重试。", openId);
+      }
       rememberConversation(openId, "user", text);
       const plannerContext = { pending: pending?.summary || null, presented: presentedCandidates(openId).map((item, index) => ({ index: index + 1, label: item.label })), references: referencesByUser.get(openId) || null };
       const isLegacyDestructiveRequest = /(删除|删掉|撤回|取消)/.test(text);
@@ -466,10 +468,10 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
       if (data.sender.sender_id?.open_id === allowedOpenId && data.message.chat_type === "p2p") void processMessage(data);
     }
   }) });
-  logger.info("飞书桥接已启动：DeepSeek V4 Pro，仅处理授权账号的私聊消息。");
+  logger.info(`飞书桥接已启动：${DEEPSEEK_MODEL}，最大输出${DEEPSEEK_MAX_TOKENS} tokens，仅处理授权账号的私聊消息。`);
   return { started: true };
 }
 
-module.exports = { answerWithDeepSeek, applyExplicitDates, buildPlannerPrompt, chineseCount, extractExplicitDates, isCancellation, isReadOnlyQuestion, isRecentUndoRequest, isRelevantClarification, parseLinkSelection, parseListedRecordDeletion, parseNaturalFinanceCommand, parseNaturalFinanceSummary, parseNaturalWaterCommand, parseRecentTotalRecordDeletion, parseSingleSelection, parseTodoAddition, parseTotalRecordDeletion, parseTotalRecordListRequest, planWithDeepSeek, startFeishuBridge, validatePlan };
+module.exports = { answerWithDeepSeek, applyExplicitDates, buildPlannerPrompt, chineseCount, extractExplicitDates, extractFeishuMessageText, isCancellation, isReadOnlyQuestion, isRecentUndoRequest, isRelevantClarification, parseLinkSelection, parseListedRecordDeletion, parseNaturalFinanceCommand, parseNaturalFinanceSummary, parseNaturalWaterCommand, parseNaturalWaterTime, parseRecentTotalRecordDeletion, parseSingleSelection, parseTodoAddition, parseTotalRecordDeletion, parseTotalRecordListRequest, planWithDeepSeek, startFeishuBridge, validatePlan };
 const { ASSISTANT_TOOL_NAMES, assistantToolProtocol } = require("./assistant-tools");
 const { ToolAgent, ToolRegistry } = require("./tool-agent");

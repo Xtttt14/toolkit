@@ -1,3 +1,5 @@
+const { requestDeepSeekCompletion } = require("./deepseek-client");
+
 class ToolRegistry {
   constructor({ tools, execute }) { this.tools = tools; this.execute = execute; }
   description() { return JSON.stringify(this.tools); }
@@ -15,13 +17,12 @@ function acceptsFirstTurnClarification(input, message) {
 }
 
 class ToolAgent {
-  constructor({ apiKey, model, registry, validatePlan, systemPrompt, maxIterations = 5, fetchImpl = fetch }) {
-    this.apiKey = apiKey; this.model = model; this.registry = registry; this.validatePlan = validatePlan; this.systemPrompt = systemPrompt; this.maxIterations = maxIterations; this.fetch = fetchImpl;
+  constructor({ apiKey, registry, validatePlan, systemPrompt, maxIterations = 5, fetchImpl = fetch }) {
+    this.apiKey = apiKey; this.registry = registry; this.validatePlan = validatePlan; this.systemPrompt = systemPrompt; this.maxIterations = maxIterations; this.fetch = fetchImpl;
   }
   async _ask(messages) {
-    const response = await this.fetch("https://api.deepseek.com/v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.apiKey}` }, body: JSON.stringify({ model: this.model, thinking: { type: "disabled" }, response_format: { type: "json_object" }, max_tokens: 900, messages }) });
-    if (!response.ok) throw new Error(`DeepSeek 请求失败：${response.status} ${await response.text()}`);
-    const body = await response.json(); return String(body.choices?.[0]?.message?.content || "");
+    const response = await requestDeepSeekCompletion({ apiKey: this.apiKey, messages, json: true, fetchImpl: this.fetch });
+    return response.content;
   }
   async run(input, context = {}) {
     const system = this.systemPrompt(this.registry.description(), context);
@@ -30,8 +31,12 @@ class ToolAgent {
     for (let step = 0; step < this.maxIterations; step += 1) {
       const raw = await this._ask(messages); let plan;
       try { plan = this.validatePlan(JSON.parse(raw)); } catch { plan = null; }
-      if (plan?.kind === "final" && (!requiresTool || lastResult)) return { status: "completed", text: plan.message, result: lastResult, steps: step };
-      if (plan?.kind === "clarify" && (!requiresTool || lastResult || acceptsFirstTurnClarification(input, plan.message))) return { status: "clarify", text: plan.message, result: lastResult, steps: step };
+      if (plan?.kind === "final" && (!requiresTool || lastResult)) {
+        return { status: "completed", text: plan.message, result: lastResult, steps: step };
+      }
+      if (plan?.kind === "clarify" && (!requiresTool || lastResult || acceptsFirstTurnClarification(input, plan.message))) {
+        return { status: "clarify", text: plan.message, result: lastResult, steps: step };
+      }
       if (plan?.kind !== "tool_calls") {
         messages.push({ role: "assistant", content: raw }, { role: "user", content: requiresTool ? "当前用户明确请求使用工具，但尚未有任何真实工具结果。不要输出 final 或泛化问候；请选择合适工具，或只询问一个确实缺失的参数。" : "输出无效。只可输出 tool_calls、clarify 或 final JSON。请重新决策。" });
         continue;

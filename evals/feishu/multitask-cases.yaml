@@ -1,0 +1,93 @@
+- description: 一次创建三个待办
+  vars:
+    message: |-
+      请按顺序执行：
+      1. 新增待办“交电费”，优先级P1
+      2. 新增待办“预约体检”，优先级P2
+      3. 新增待办“整理报销材料”，优先级P3
+    expectedCalls:
+      - name: todo.create
+        arguments: { title: 交电费, priority: P1 }
+      - name: todo.create
+        arguments: { title: 预约体检, priority: P2 }
+      - name: todo.create
+        arguments: { title: 整理报销材料, priority: P3 }
+
+- description: 跨领域三个独立任务
+  vars:
+    message: 请依次新增待办“买打印纸”，记录午餐支出36元备注牛肉面，再记录饮水300ml。
+    expectedCalls:
+      - name: todo.create
+        arguments: { title: 买打印纸 }
+      - name: finance.create
+        arguments: { amount: 36, note: 牛肉面 }
+      - name: water.add
+        arguments: { ml: 300 }
+
+- description: 专注饮水和待办混合任务
+  vars:
+    message: 创建一个45分钟的专注任务“复习算法”，然后记录饮水250ml，最后新增待办“提交周报”优先级P1。
+    expectedCalls:
+      - name: pomodoro.create_task
+        arguments: { title: 复习算法, minutes: 45 }
+      - name: water.add
+        arguments: { ml: 250 }
+      - name: todo.create
+        arguments: { title: 提交周报, priority: P1 }
+
+- description: 八个任务达到调用数量上限
+  vars:
+    message: 一次创建八个待办，标题依次为任务一、任务二、任务三、任务四、任务五、任务六、任务七、任务八。
+    expectedCalls:
+      - name: todo.create
+        arguments: { title: 任务一 }
+      - name: todo.create
+        arguments: { title: 任务二 }
+      - name: todo.create
+        arguments: { title: 任务三 }
+      - name: todo.create
+        arguments: { title: 任务四 }
+      - name: todo.create
+        arguments: { title: 任务五 }
+      - name: todo.create
+        arguments: { title: 任务六 }
+      - name: todo.create
+        arguments: { title: 任务七 }
+      - name: todo.create
+        arguments: { title: 任务八 }
+
+- description: 多笔算式消费先计算再批量写入
+  vars:
+    message: |-
+      给8.16计入消费：
+      1. 午餐，咕咕煲，消费278/3
+      2. 娱乐，ps5体验店，消费（123+28）/3
+      3. 晚餐，椰子鸡，消费96
+    expectedAlternatives:
+      - - name: math.calculate
+        - name: math.calculate
+        - name: finance.batch_create
+          arguments:
+            entries: [{}, {}, {}]
+      - - name: math.calculate
+        - name: math.calculate
+        - name: finance.create
+        - name: finance.create
+        - name: finance.create
+    # Planner只评估单轮决策；Agent评测负责确认计算后继续完成写入。
+    expectedPlannerAlternatives:
+      - - name: math.calculate
+        - name: math.calculate
+      - - name: math.calculate
+        - name: math.calculate
+        - name: math.calculate
+      - - name: math.calculate
+        - name: math.calculate
+        - name: finance.batch_create
+          arguments:
+            entries: [{}, {}, {}]
+      - - name: math.calculate
+        - name: math.calculate
+        - name: finance.create
+        - name: finance.create
+        - name: finance.create

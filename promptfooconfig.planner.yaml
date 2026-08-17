@@ -1,0 +1,13 @@
+description: 飞书多任务Planner真实模型评测
+prompts:
+  - "{{message}}"
+providers:
+  - id: file://./evals/feishu/planner-provider.cjs
+    config:
+      model: deepseek-v4-flash
+      maxTokens: 3000
+tests: file://./evals/feishu/multitask-cases.yaml
+defaultTest:
+  assert:
+    - type: javascript
+      value: file://./evals/feishu/assert-planner.cjs

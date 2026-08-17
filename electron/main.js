@@ -347,15 +347,18 @@ function addDrink(payload = {}) {
   const settings = state.settings;
   const selectedCup = state.selectedCup;
   const key = payload.date || todayKey();
-  const at = payload.time ? new Date(`${key}T${payload.time}:00`) : new Date();
+  const time = payload.time == null ? null : String(payload.time);
+  if (time !== null && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) throw new Error("饮水时间必须是 HH:mm 格式");
+  const at = time ? new Date(`${key}T${time}:00`) : new Date();
   const day = getDay(key);
-  day.entries.push({
+  const entry = {
     id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
     at: at.toISOString(),
     ml: Number(payload.ml || selectedCup.ml),
     cupId: selectedCup.id,
     source: payload.source || "button"
-  });
+  };
+  day.entries.push(entry);
   day.entries.sort((a, b) => new Date(a.at) - new Date(b.at));
   setDay(key, day);
   clearWaterReminderState();
@@ -363,7 +366,7 @@ function addDrink(payload = {}) {
   if (payload.source === "tray" || payload.source === "menu") {
     new Notification({ title: "已记录一杯水", body: `今天已记录 ${getWaterState().today.cups}/${settings.targetCups} 杯。`, silent: true }).show();
   }
-  return getWaterState();
+  return { ...getWaterState(), lastAddedEntry: entry };
 }
 
 function undoDrink() {
@@ -930,8 +933,8 @@ function executeAssistantToolCalls(calls) {
       results.push(`计算结果：${args.expression} = ${value}`); continue;
     }
     if (call.name === "water.add") {
-      const state = addDrink({ ml: args.ml, date: args.date, source: "feishu" }); const item = state.today.lastEntry;
-      results.push(`已记录饮水${item.ml}ml。`); references.last_water = { id: item.id, label: `饮水${item.ml}ml` }; continue;
+      const state = addDrink({ ml: args.ml, date: args.date, time: args.time, source: "feishu" }); const item = state.lastAddedEntry;
+      results.push(`已${args.time ? `按${args.time}` : ""}记录饮水${item.ml}ml。`); references.last_water = { id: item.id, label: `饮水${item.ml}ml` }; continue;
     }
     if (call.name === "water.status") { const state = getWaterState(); results.push(`今日已饮水${state.today.cups}杯，${state.today.totalMl}/${state.today.targetMl}ml。`); continue; }
     if (call.name === "water.undo_last") { undoDrink(); results.push("已撤回最近一杯水。"); continue; }
@@ -1088,7 +1091,7 @@ function executeFeishuAction(plan) {
   }
   if (plan.kind === "select") return { text: applySelection(plan.target, plan.patch, plan.operation) };
   const { entity, patch } = plan;
-  if (entity === "water") { const state = addDrink({ ml: patch.ml, source: "feishu" }); const item = state.today.lastEntry; remember({ kind: "add", entity, id: item.id, date: state.date, label: label(entity, item) }); return { text: `已记录${label(entity, item)}` }; }
+  if (entity === "water") { const state = addDrink({ ml: patch.ml, date: patch.date, time: patch.time, source: "feishu" }); const item = state.lastAddedEntry; remember({ kind: "add", entity, id: item.id, date: patch.date || state.date, label: label(entity, item) }); return { text: `已${patch.time ? `按${patch.time}` : ""}记录${label(entity, item)}` }; }
   if (entity === "todo") { const title = String(patch.title || "").trim(); if (!title) throw new Error("任务名称不能为空"); const data = getTodoData(); const item = normalizeTodoTask({ title, description: patch.description || "", priority: patch.priority || "P3", dueDate: patch.dueDate || null, reminderMinutes: 30 }); data.tasks.push(item); saveTodoData(data); broadcastState(); remember({ kind: "add", entity, id: item.id, label: label(entity, item) }); return { text: `已新增${label(entity, item)}` }; }
   if (entity === "finance") {
     const dates = [...new Set((Array.isArray(patch.dates) ? patch.dates : [patch.date || todayKey()]).filter(date => /^\d{4}-\d{2}-\d{2}$/.test(String(date))))];
