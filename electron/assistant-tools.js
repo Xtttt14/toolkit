@@ -10,7 +10,7 @@ const ASSISTANT_TOOLS = [
   { name: "pomodoro.start", description: "开始专注计时。", required: ["title"], properties: { title: "string", minutes: "number，倒计时分钟，省略则正计时", tags: "string[]，可选" } },
   { name: "pomodoro.finish", description: "结束当前专注。", required: [], properties: { status: "completed 或 abandoned，默认 completed" } },
   { name: "pomodoro.create_task", description: "创建可供开始专注的任务。", required: ["title"], properties: { title: "string", minutes: "number，可选", tags: "string[]，可选" } },
-  { name: "finance.create", description: "新增一笔收入或支出。", required: ["amount"], properties: { type: "expense 或 income，默认 expense", amount: "number，必须大于 0", tag: "string，可选", note: "string，可选", date: "YYYY-MM-DD，可选" } },
+  { name: "finance.create", description: "新增一笔收入或支出。", required: ["amount"], properties: { type: "expense 或 income，默认 expense", amount: "number 或仅含数字、+ - * / () 的算式；必须计算为大于 0", tag: "string，可选", note: "string，可选", date: "YYYY-MM-DD，可选" } },
   { name: "finance.batch_create", description: "一次新增多笔账单；每条记录独立校验，全部有效才写入。", required: ["entries"], properties: { entries: "至少一条 finance.create 参数的数组" } },
   { name: "finance.summary", description: "按本地完整账单精确统计某月支出及分类。", required: [], properties: { month: "YYYY-MM，可选，默认本月" } },
   { name: "finance.create_and_link_total", description: "新建每日账单并关联到总计项目，绝不创建总计独立记录替代关联。", required: ["entry", "totalName"], properties: { entry: "finance.create 参数", totalName: "string" } },

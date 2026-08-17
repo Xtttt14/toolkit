@@ -51,7 +51,7 @@ function validatePlan(plan) {
     if (!Array.isArray(plan.steps) || !plan.steps.length || plan.steps.length > 6 || plan.steps.some(step => !step || !actions.has(step.action) || typeof step.data !== "object")) throw new Error("DeepSeek 返回了无效工作流");
     return { kind: "workflow", entity: null, steps: plan.steps.map((step, index) => ({ id: String(step.id || `step_${index + 1}`), action: step.action, data: step.data })) };
   }
-  if (plan.entity !== null && !entities.has(plan.entity)) throw new Error("DeepSeek 返回了不支持的实体");
+  if (plan.entity != null && !entities.has(plan.entity)) throw new Error("DeepSeek 返回了不支持的实体");
   return {
     kind: plan.kind,
     entity: plan.entity || null,

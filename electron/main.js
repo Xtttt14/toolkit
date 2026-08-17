@@ -852,6 +852,18 @@ function financeMonthlySummary(month) {
   else lines.push("本月暂无支出记录。");
   return { text: lines.join("\n") };
 }
+function resolveAssistantAmount(value) {
+  if (typeof value === "number") return value;
+  const expression = String(value ?? "").trim();
+  if (!expression || !/^[\d\s+\-*/().]+$/.test(expression)) throw new Error("金额必须是数字或仅包含加减乘除和括号的算式");
+  // 先限制字符集，再执行纯算术表达式；不允许变量、属性访问或函数调用。
+  const result = Function(`"use strict"; return (${expression});`)();
+  if (!Number.isFinite(result)) throw new Error("金额算式结果无效");
+  return Math.round(result * 100) / 100;
+}
+function materializeAssistantFinanceEntry(entry = {}) {
+  return { ...entry, amount: resolveAssistantAmount(entry.amount ?? entry.amount_expression) };
+}
 function executeAssistantToolCalls(calls) {
   const results = []; const references = {}; let candidates = null;
   const resolveRef = value => typeof value === "string" && value.startsWith("$") ? references[value.slice(1)]?.id || value : value;
@@ -885,10 +897,10 @@ function executeAssistantToolCalls(calls) {
     }
     if (call.name === "pomodoro.finish") { const before = getPomodoroData().active; if (!before) throw new Error("当前没有进行中的专注"); finishPomodoro(args.status === "abandoned" ? "abandoned" : "completed"); results.push(`已结束专注「${before.title}」。`); continue; }
     if (call.name === "pomodoro.create_task") { const data = getPomodoroData(); const task = normalizePomodoroTask({ title: args.title, tags: args.tags || [], mode: Number(args.minutes) > 0 ? "countdown" : "countup", plannedSeconds: Number(args.minutes) * 60 }); if (!task.title) throw new Error("专注任务缺少标题"); data.tasks.unshift(task); data.tags = normalizeStringList([...data.tags, ...task.tags]); savePomodoroData(data); broadcastPomodoro(); results.push(`已新增专注任务「${task.title}」。`); continue; }
-    if (call.name === "finance.create") { const result = executeFeishuAction({ kind: "add", entity: "finance", patch: args }); results.push(result.text); if (result.references?.lastFinance) references.last_finance = result.references.lastFinance; continue; }
-    if (call.name === "finance.batch_create") { const entries = Array.isArray(args.entries) ? args.entries : []; if (!entries.length) throw new Error("批量记账缺少 entries"); const workflow = { kind: "workflow", steps: entries.map((entry, index) => ({ id: `entry_${index}`, action: "finance.create", data: entry })) }; const result = executeFinanceWorkflow(workflow); results.push(result.text); if (result.references?.lastFinance) references.last_finance = result.references.lastFinance; continue; }
+    if (call.name === "finance.create") { const result = executeFeishuAction({ kind: "add", entity: "finance", patch: materializeAssistantFinanceEntry(args) }); results.push(result.text); if (result.references?.lastFinance) references.last_finance = result.references.lastFinance; continue; }
+    if (call.name === "finance.batch_create") { const entries = Array.isArray(args.entries) ? args.entries : []; if (!entries.length) throw new Error("批量记账缺少 entries"); const workflow = { kind: "workflow", steps: entries.map((entry, index) => ({ id: `entry_${index}`, action: "finance.create", data: materializeAssistantFinanceEntry(entry) })) }; const result = executeFinanceWorkflow(workflow); results.push(result.text); if (result.references?.lastFinance) references.last_finance = result.references.lastFinance; continue; }
     if (call.name === "finance.summary") { results.push(financeMonthlySummary(args.month).text); continue; }
-    if (call.name === "finance.create_and_link_total") { const result = executeFinanceWorkflow({ kind: "workflow", steps: [{ id: "entry", action: "finance.create", data: args.entry || {} }, { id: "link", action: "finance.link_to_total", data: { financeRef: "$entry", totalName: args.totalName } }] }); results.push(result.text); if (result.references?.lastFinance) references.last_finance = result.references.lastFinance; continue; }
+    if (call.name === "finance.create_and_link_total") { const result = executeFinanceWorkflow({ kind: "workflow", steps: [{ id: "entry", action: "finance.create", data: materializeAssistantFinanceEntry(args.entry || {}) }, { id: "link", action: "finance.link_to_total", data: { financeRef: "$entry", totalName: args.totalName } }] }); results.push(result.text); if (result.references?.lastFinance) references.last_finance = result.references.lastFinance; continue; }
     if (call.name === "finance.list") { const entries = getFinanceData().entries.filter(entry => (!args.month || entry.date.startsWith(args.month)) && (!args.tag || entry.tag === args.tag) && (!args.text || `${entry.tag} ${entry.note}`.includes(args.text))); results.push(entries.length ? entries.slice(0, 12).map((entry, index) => `${index + 1}. ${label("finance", entry)}`).join("\n") : "没有找到匹配的账单。"); continue; }
     if (call.name === "finance.update") { const id = resolveRef(args.entryId); const result = applySelection({ entity: "finance", id }, args.patch || {}, "update"); results.push(result); continue; }
     if (call.name === "total.create") { const result = executeFeishuAction({ kind: "add", entity: "total", patch: { name: args.name } }); results.push(result.text); continue; }

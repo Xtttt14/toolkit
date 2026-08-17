@@ -30,5 +30,6 @@ assert.deepEqual(parseNaturalFinanceSummary("2026年7月支出合计", new Date(
 assert(ASSISTANT_TOOL_NAMES.has("water.add") && ASSISTANT_TOOL_NAMES.has("todo.create") && ASSISTANT_TOOL_NAMES.has("finance.batch_create") && ASSISTANT_TOOL_NAMES.has("pomodoro.start"));
 assert.deepEqual(validatePlan({ kind: "tool_calls", calls: [{ name: "water.add", arguments: {} }] }), { kind: "tool_calls", calls: [{ name: "water.add", arguments: {} }] });
 assert.throws(() => validatePlan({ kind: "tool_calls", calls: [{ name: "system.delete", arguments: {} }] }));
+assert.equal(validatePlan({ kind: "clarify", message: "请补充金额" }).kind, "clarify");
 assert.equal(parseListedRecordDeletion("删掉1."), 1);
 console.log("飞书多步骤记账工作流检查通过。");
