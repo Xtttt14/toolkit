@@ -4,6 +4,7 @@ import {
   Check, X, Calendar, Flag, AlertCircle, ListChecks, CheckCheck, GripVertical
 } from "lucide-react";
 import MenuSelect from "../../components/MenuSelect";
+import DatePicker from "../../components/DatePicker";
 
 const PRIORITIES = ["P0", "P1", "P2", "P3"];
 const PRIORITY_COLORS = { P0: "#e03131", P1: "#f08c00", P2: "#2f9e44", P3: "#868e96" };
@@ -713,7 +714,7 @@ function EditModal({ task, tags, mode = "edit", onClose, onSave, onDelete, onTog
 
             <label className="modal-field half">
               <span>截止日期</span>
-              <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+              <DatePicker value={dueDate} allowEmpty ariaLabel="截止日期" onChange={setDueDate} />
             </label>
           </div>
 

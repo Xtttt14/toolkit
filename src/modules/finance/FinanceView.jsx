@@ -8,6 +8,7 @@ import {
   TrendingUp, Upload, Users, Utensils, Wallet, Wine, X, Zap, FolderKanban, Link2, FilePlus2
 } from "lucide-react";
 import MenuSelect from "../../components/MenuSelect";
+import DatePicker from "../../components/DatePicker";
 
 const expenseTags = [
   ["三餐", Utensils], ["零食", Coffee], ["衣服", Shirt], ["交通", Bus], ["旅行", Plane],
@@ -224,7 +225,7 @@ function BatchEntryModal({ data, initialDate, onClose }) {
       <form className="calendar-edit-form" onSubmit={submit}>
         <div className="type-switch"><button type="button" className={type === "expense" ? "active expense" : ""} onClick={() => changeType("expense")}>支出</button><button type="button" className={type === "income" ? "active income" : ""} onClick={() => changeType("income")}>收入</button></div>
         <div className="calendar-edit-row"><label><span>金额</span><input className="finance-amount-input" autoFocus value={amount} inputMode="decimal" onChange={event => setAmount(event.target.value)} /></label><label><span>标签</span><MenuSelect value={tag} ariaLabel="批量账单标签" onChange={setTag} options={tags.map(item => ({ value:item, label:item }))} /></label></div>
-        <div className="calendar-edit-row"><label><span>开始日期</span><input type="date" value={start} onChange={event => setStart(event.target.value)} /></label><label><span>结束日期</span><input type="date" value={end} onChange={event => setEnd(event.target.value)} /></label></div>
+        <div className="calendar-edit-row"><label><span>开始日期</span><DatePicker value={start} max={end} ariaLabel="开始日期" onChange={setStart} /></label><label><span>结束日期</span><DatePicker value={end} min={start} ariaLabel="结束日期" onChange={setEnd} /></label></div>
         <label><span>备注</span><input value={note} maxLength={60} onChange={event => setNote(event.target.value)} placeholder="可选备注" /></label>
         <div className="batch-hint">将添加{start <= end ? datesBetween(start, end).length : 0}笔账目（最多366天）</div>
         <div className="calendar-edit-actions"><span className="save-message">{message}</span><button type="button" onClick={onClose}>取消</button><button type="submit"><Save size={16} />批量保存</button></div>
@@ -346,7 +347,7 @@ function TodayPage({ data }) {
         <header className="ledger-heading">
           <div><h2>账目</h2></div>
           <div className="ledger-date-area">
-            <label><span>账单日期</span><input type="date" value={selectedDate} onChange={event => { setSelectedDate(event.target.value); reset(); }} /></label>
+            <label><span>账单日期</span><DatePicker value={selectedDate} ariaLabel="账单日期" onChange={next => { setSelectedDate(next); reset(); }} /></label>
             <div className="today-balance">
               <span>收入<b>¥{money(selectedTotals.income)}</b></span>
               <span>支出<b>¥{money(selectedTotals.expense)}</b></span>
@@ -415,7 +416,7 @@ function EntryEditModal({ entry, data, onClose }) {
           </div>
           <label><span>金额</span><input className="finance-amount-input" autoFocus value={amount} inputMode="decimal" onChange={event => setAmount(event.target.value)} /></label>
           <div className="calendar-edit-row">
-            <label><span>日期</span><input type="date" value={date} onChange={event => setDate(event.target.value)} /></label>
+            <label><span>日期</span><DatePicker value={date} ariaLabel="账目日期" onChange={setDate} /></label>
             <label><span>标签</span><MenuSelect value={tag} ariaLabel="账目标签" onChange={setTag} options={tags.map(item => ({ value:item, label:item }))} /></label>
           </div>
           <label><span>备注</span><input value={note} maxLength={60} onChange={event => setNote(event.target.value)} placeholder="可选备注" /></label>
@@ -825,14 +826,14 @@ function ProjectDetail({ project, data, onBack }) {
           <form onSubmit={addRecord}>
             <label><span>金额</span><div><b>¥</b><input ref={amountInputRef} value={amount} inputMode="decimal" onChange={event => setAmount(event.target.value)} placeholder="0.00" /></div></label>
             <label><span>备注（可选）</span><input value={note} maxLength={120} onChange={event => setNote(event.target.value)} placeholder="例如：10张25cm象皮纸" /></label>
-            <label><span>日期（可选）</span><input type="date" value={recordDate} onChange={event => setRecordDate(event.target.value)} /></label>
+            <label><span>日期（可选）</span><DatePicker value={recordDate} allowEmpty ariaLabel="记录日期" onChange={setRecordDate} /></label>
             <button type="submit"><Save size={16} />添加记录</button>
           </form>
         </section>
         <section className="finance-card total-link-card">
           <header><div><span>每日账单</span><h2>关联已有记录</h2></div><button onClick={() => setShowLinks(value => !value)}><Link2 size={16} />{showLinks ? "收起" : "管理关联"}</button></header>
           <p>已关联 {linkedEntries.length} 笔。原账单改动或删除后，项目总额会自动同步。</p>
-          {showLinks && <><label className="total-link-date"><span>账单日期</span><input type="date" value={linkDate} onChange={event => setLinkDate(event.target.value)} /></label><div className="total-link-list">
+          {showLinks && <><label className="total-link-date"><span>账单日期</span><DatePicker value={linkDate} ariaLabel="关联账单日期" onChange={setLinkDate} /></label><div className="total-link-list">
             {selectableEntries.map(entry => {
               const checked = (project.linkedEntryIds || []).includes(entry.id);
               return <label key={entry.id}><input type="checkbox" checked={checked} onChange={() => toggleLink(entry.id)} /><span><b>{entry.note || "无备注"}</b><small>{entry.date}</small></span><strong>¥{money(entry.amount)}</strong></label>;
@@ -887,7 +888,7 @@ function TotalRecordEditModal({ projectId, record, onClose }) {
         <form className="calendar-edit-form" onSubmit={submit}>
           <label><span>金额</span><input className="finance-amount-input" autoFocus value={amount} inputMode="decimal" onChange={event => setAmount(event.target.value)} /></label>
           <label><span>备注（可选）</span><input value={note} maxLength={120} onChange={event => setNote(event.target.value)} placeholder="可选备注" /></label>
-          <label><span>日期（可选）</span><input type="date" value={date} onChange={event => setDate(event.target.value)} /></label>
+          <label><span>日期（可选）</span><DatePicker value={date} allowEmpty ariaLabel="修改记录日期" onChange={setDate} /></label>
           <div className="calendar-edit-actions"><button type="button" onClick={onClose}>取消</button><button type="submit"><Save size={16} />保存修改</button></div>
         </form>
       </section>

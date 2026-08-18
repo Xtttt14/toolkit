@@ -36,10 +36,19 @@ function buildPlannerPrompt(text, pending, history) {
 2. {"kind":"clarify","message":"只问一个关键缺失信息的问题"}。
 3. {"kind":"final","message":"基于真实工具结果给用户的简洁答复"}。只有已经拿到工具结果或用户纯聊天时才可输出 final。
 只要用户请求查看、记录、修改或执行工具箱能力，必须输出 tool_calls，绝不能输出聊天回答或旧版 kind/entity/workflow 格式。多条编号消费、多个待办或多个连续动作必须保留为多个条目或多个 calls，按顺序执行，不能只处理第一条。
+拿到真实工具结果后，仍由你输出 final，但必须遵守以下统一排版规范：
+- 只能依据真实工具结果，不得补写、猜测、删减记录或改变统计数字。
+- 保留工具结果中的标题、字段顺序、日期分组和换行层级；可以润色提示句，但不能另创一种版式。
+- 飞书当前发送纯文本，不要输出 Markdown 标记（例如 **、###、代码围栏或表格语法）。
+- 账单明细固定按“备注、金额、标签、日期”的顺序；多日账单先输出日期标题，再列该日账单，不要把标签放在备注前。
+- 金额统一保留两位小数并带¥；同一层级每项单独换行，不要把多笔记录挤在同一行。
+- 饮水历史必须保留查询范围、总饮水、杯数、有记录天数、日均、达标天数和每日明细；不得用今日状态代替历史查询。
+- 待办、专注、课表、考试及设置查询同样保留工具结果的栏目顺序，列表必须编号。
 金额出现算式时，先调用 math.calculate，并给 resultKey；后续账单 amount 使用 "$resultKey"。中文括号和英文括号都可传给 math.calculate。用户说“16号/16日”时，账单 date 使用本地日期所属年月的 16 日。午餐、晚餐等餐饮默认使用“三餐”标签。
 用户写“8.16”或“8月16日”时，账单 date 使用当前年份的 08-16。
 修改既有账单时，先用 finance.list 按备注、金额、日期定位，再把返回的真实 entryId 传给 finance.update；如果用户已给出备注、金额和日期，也可以直接在 finance.update.match 传这组条件。绝不可把“备注+金额+日期”的自然语言描述填入 entryId。更新日期可传 YYYY-MM-DD 或 M-D。
 参数缺失、对象指代不唯一、金额含义不能确定时，输出 clarify；不要猜测，不要把写入请求改成待办/聊天查询。
+用户说“近N天”时，对应历史或账单查询必须传 days:N；“某天”传 date；明确起止日期传 startDate/endDate。不得把区间查询降级成今日查询或只读聊天回答。
 当前本地日期是 ${dateKey(new Date())}。
 当前候选会话：${JSON.stringify(pending || null)}`;
 }
@@ -320,7 +329,7 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
       }
       rememberConversation(openId, "user", text);
       const plannerContext = { pending: pending?.summary || null, presented: presentedCandidates(openId).map((item, index) => ({ index: index + 1, label: item.label })), references: referencesByUser.get(openId) || null };
-      const isLegacyDestructiveRequest = /(删除|删掉|撤回|取消)/.test(text);
+      const isLegacyDestructiveRequest = /(删除|删掉|撤回|取消|清空)/.test(text);
       if (!pending && !isLegacyDestructiveRequest) {
         const agent = await toolAgent.run(text, plannerContext);
         if (agent.status === "clarify") return void await reply(messageId, agent.text, openId);
@@ -354,6 +363,18 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
           return void await reply(messageId, "已取消删除。", openId);
         }
         return void await reply(messageId, "请回复“确认删除”执行，或回复“取消”放弃。", openId);
+      }
+      const destructiveToolNames = new Set([
+        "todo.delete", "todo.subtask.delete", "todo.tag.delete",
+        "pomodoro.task.delete", "pomodoro.history.clear", "pomodoro.tag.delete",
+        "finance.delete", "finance.tag.delete", "finance.backup.import",
+        "total.delete", "total.record.delete", "total.unlink_bill", "app.update.install"
+      ]);
+      const destructiveCalls = plan.kind === "tool_calls" ? plan.calls.filter(call => destructiveToolNames.has(call.name)) : [];
+      if (!pending && destructiveCalls.length) {
+        const names = destructiveCalls.map(call => call.name).join("、");
+        const confirmedPlan = { ...plan, calls: plan.calls.map(call => destructiveToolNames.has(call.name) ? { ...call, arguments: { ...call.arguments, confirmed: true } } : call) };
+        return void await askDeleteConfirmation(messageId, openId, confirmedPlan, `将执行删除或清空操作：${names}`);
       }
       const batchDeletion = !pending && parseRecentTotalRecordDeletion(text);
       if (batchDeletion) {

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import DatePicker from "../components/DatePicker";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, BarChart3, Check, ChevronRight, Clock3, Expand,
@@ -613,9 +614,9 @@ function Reports({ data, onClearSessions }) {
         </div>
         {period === "custom" && (
           <label className="custom-range">
-            <input type="date" value={customStart} max={customEnd} onChange={event => setCustomStart(event.target.value)} />
+            <DatePicker value={customStart} max={customEnd} ariaLabel="统计开始日期" onChange={setCustomStart} />
             <span>至</span>
-            <input type="date" value={customEnd} min={customStart} onChange={event => setCustomEnd(event.target.value)} />
+            <DatePicker value={customEnd} min={customStart} ariaLabel="统计结束日期" onChange={setCustomEnd} />
           </label>
         )}
         <span className="range-label">{range.label}</span>

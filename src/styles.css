@@ -2297,6 +2297,62 @@ select option:checked { color:#fff; background:var(--select-option-bg); font-wei
 .widget-compact-form .menu-select .menu-select-popover { z-index:120; border-radius:12px; }
 .widget-compact-form .menu-select .menu-select-popover button { min-height:32px; padding-inline:11px; font-size:10px; }
 
+/* Shared date control */
+.date-picker { position:relative; display:inline-block; min-width:0; }
+.date-picker-trigger { width:100%; min-width:132px; height:40px; padding:0 10px 0 12px; display:flex; align-items:center; justify-content:space-between; gap:8px; color:#263946; background:#fff; border:1px solid #d6e0e5; border-radius:8px; font:inherit; text-align:left; }
+.date-picker-trigger:hover:not(:disabled), .date-picker-trigger[aria-expanded="true"] { border-color:#8caeba; background:#fbfdfe; }
+.date-picker-trigger:focus-visible { outline:2px solid rgba(22,119,200,.38); outline-offset:2px; }
+.date-picker-trigger svg { flex:0 0 auto; color:#5d7480; }
+.date-picker-panel { position:fixed; z-index:400; width:min(312px,calc(100vw - 24px)); padding:0 14px 14px; overflow:auto; color:#1d2c35; background:#fff; border:1px solid #dce5e9; border-radius:10px; box-shadow:0 16px 38px rgba(25,48,60,.2); }
+.date-picker-panel > header { display:grid; grid-template-columns:56px 1fr 56px; align-items:center; min-height:48px; border-bottom:1px solid #edf1f3; }
+.date-picker-panel > header strong { font-size:15px; text-align:center; }
+.date-picker-panel > header button { padding:7px 0; color:#1878b6; background:transparent; font-size:13px; font-weight:700; }
+.date-picker-nav { display:grid; grid-template-columns:36px 1fr 36px; align-items:center; padding:9px 0; }
+.date-picker-nav > button { width:32px; height:32px; display:grid; place-items:center; justify-self:center; color:#45616e; background:transparent; border-radius:6px; }
+.date-picker-nav > button:hover { background:#f0f6f8; }
+.date-picker-nav .date-picker-month-button { width:auto; padding:0 8px; color:#1f3540; font-weight:750; }
+.date-picker-weekdays, .date-picker-days { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); }
+.date-picker-weekdays { height:26px; align-items:center; }
+.date-picker-weekdays span { color:#83929a; font-size:12px; line-height:1; text-align:center; }
+.date-picker-days { grid-auto-rows:36px; row-gap:2px; column-gap:0; align-items:center; }
+.date-picker-days button { width:34px; height:34px; display:grid; place-items:center; justify-self:center; padding:0; color:#30434d; background:#fff; border-radius:50%; font-size:13px; line-height:1; }
+.date-picker-days button:hover:not(:disabled) { background:#edf6f9; }
+.date-picker-days button.muted { color:#b8c2c7; }
+.date-picker-days button.selected { color:#fff; background:#1677c8; font-weight:800; }
+.date-picker-days button:disabled { color:#d5dce0; cursor:not-allowed; }
+.date-picker-year-month { display:grid; grid-template-columns:42% 58%; min-height:258px; margin-inline:-14px; }
+.date-picker-year-wheel { min-height:0; max-height:258px; padding:12px 12px 18px; overflow-y:auto; overscroll-behavior:contain; scroll-snap-type:y mandatory; border-right:1px solid #edf1f3; }
+.date-picker-year-wheel button { display:block; width:100%; min-height:42px; margin:2px 0; padding:0 12px; color:#17252e; background:#fff; border-radius:999px; font-size:17px; line-height:1; scroll-snap-align:center; }
+.date-picker-year-wheel button:hover { background:#f1f7f9; }
+.date-picker-year-wheel button.active { color:#fff; background:#1396e9; font-weight:800; }
+.date-picker-month-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-auto-rows:42px; align-content:center; gap:4px 10px; padding:18px 16px; }
+.date-picker-month-grid button { display:grid; place-items:center; min-width:0; color:#17252e; background:#fff; border-radius:6px; font-size:17px; line-height:1; }
+.date-picker-month-grid button:hover { background:#f1f7f9; }
+.date-picker-month-grid button.active { color:#1396e9; font-weight:800; }
+.date-picker-clear { width:100%; margin-top:8px; padding:7px; color:#6c7d85; background:#f4f7f8; border-radius:6px; font-size:12px; }
+.date-picker-clear:hover { color:#315464; background:#eaf2f4; }
+.calendar-edit-form .date-picker, .modal-field .date-picker, .total-link-date .date-picker, .ledger-date-area .date-picker { width:100%; }
+.calendar-edit-form .date-picker-trigger, .modal-field .date-picker-trigger { height:40px; background:#fafaf7; border-color:#dfe2dd; }
+.modal-field .date-picker-trigger { height:42px; }
+.academic-toolbar .date-picker { margin-left:8px; }
+.academic-toolbar .jump-date .date-picker { margin-left:0; max-width:142px; }
+.custom-range .date-picker { width:120px; }
+.custom-range .date-picker-trigger { min-width:0; height:32px; padding-inline:8px; color:var(--pomo-ink); background:#f7f2ea; border-color:#ddd4c7; border-radius:7px; font-size:11px; }
+.ledger-date-area .date-picker { width:136px; }
+.ledger-date-area .date-picker-trigger, .total-link-date .date-picker-trigger { min-width:0; height:32px; padding-inline:8px; color:var(--finance-ink); background:#fafaf7; border-color:#dfe2dd; border-radius:7px; font-size:12px; }
+.total-link-date .date-picker { width:136px; }
+
+/* Remove the duplicated filter wrapper border while retaining the separator. */
+.todo-filters .todo-select { height:36px; padding:0; background:transparent; border:0; border-radius:0; }
+.todo-filters .todo-select + .todo-select::before { content:""; position:absolute; left:-6px; top:8px; width:1px; height:20px; background:#dce3e9; pointer-events:none; }
+
+/* One visual treatment for every scrollable surface without affecting its dimensions or behavior. */
+* { scrollbar-width:thin !important; scrollbar-color:rgba(76,105,118,.46) transparent !important; }
+*::-webkit-scrollbar { width:8px !important; height:8px !important; }
+*::-webkit-scrollbar-track { background:transparent !important; }
+*::-webkit-scrollbar-thumb { background:rgba(76,105,118,.38) !important; border:2px solid transparent !important; border-radius:8px !important; background-clip:padding-box !important; }
+*::-webkit-scrollbar-thumb:hover { background:rgba(45,83,101,.58) !important; }
+
 /* Native controls remain neutral if a future page still needs one. */
 select { -webkit-appearance:auto; appearance:auto; padding:0 8px; color:inherit; background-image:none!important; box-shadow:none!important; }
 select option, select option:checked { color:inherit; background:initial; font-weight:inherit; }
