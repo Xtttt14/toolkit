@@ -64,7 +64,14 @@ export default function DatePicker({ value, onChange, min, max, ariaLabel, class
     setDraft(next < minKey ? minKey : next > maxKey ? maxKey : next);
   };
   const changeMonth = delta => setMonth(selected.getFullYear(), selected.getMonth() + delta);
-  const pickDay = day => { const next = dateKey(day); if (next >= minKey && next <= maxKey) setDraft(next); };
+  const pickDay = day => {
+    const next = dateKey(day);
+    if (next < minKey || next > maxKey) return;
+    setDraft(next);
+    onChange(next);
+    setOpen(false);
+    setView("date");
+  };
   const confirm = () => { onChange(draft); setOpen(false); setView("date"); };
 
   return <div className={`date-picker ${className}`} ref={rootRef}>
