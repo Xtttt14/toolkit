@@ -1,11 +1,19 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, CupSoda } from "lucide-react";
+import { ArrowLeft, CalendarDays, CupSoda, Droplets, Settings } from "lucide-react";
 import DrinkingView from "./drinking/DrinkingView.jsx";
+
+const pages = [
+  { id: "cups", label: "容积", icon: CupSoda },
+  { id: "progress", label: "进度", icon: Droplets },
+  { id: "history", label: "历史", icon: CalendarDays },
+  { id: "settings", label: "设置", icon: Settings }
+];
 
 export default function DrinkingApp() {
   const navigate = useNavigate();
   const [state, setState] = useState(null);
+  const [view, setView] = useState("cups");
 
   useEffect(() => {
     window.waterApi.getState().then(s => setState(s));
@@ -17,7 +25,7 @@ export default function DrinkingApp() {
 
   return (
     <main className="app-shell drinking-shell">
-      <aside className="sidebar">
+      <aside className="sidebar drinking-sidebar">
         <div className="brand">
           <span className="brand-mark internal-module-mark" aria-hidden="true">
             <CupSoda size={27} strokeWidth={1.8} />
@@ -27,9 +35,19 @@ export default function DrinkingApp() {
             <span>本地工作助手</span>
           </div>
         </div>
-        <nav className="nav">
-          {/* 左侧导航留白，后续添加 */}
+        <nav className="nav drinking-nav" aria-label="饮水页面">
+          {pages.map(item => (
+            <button
+              key={item.id}
+              className={view === item.id ? "active" : ""}
+              onClick={() => setView(item.id)}
+            >
+              <item.icon size={19} />
+              <span>{item.label}</span>
+            </button>
+          ))}
         </nav>
+        <div className="drinking-local-note"><span className="status-dot" />数据仅保存在本机</div>
       </aside>
 
       <section className="workspace">
@@ -44,7 +62,7 @@ export default function DrinkingApp() {
             </div>
           </div>
         </header>
-        <DrinkingView state={state} setState={setState} />
+        <DrinkingView state={state} setState={setState} view={view} setView={setView} />
       </section>
     </main>
   );

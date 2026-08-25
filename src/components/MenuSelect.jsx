@@ -5,6 +5,11 @@ export default function MenuSelect({ value, options, onChange, className = "", d
   const [open, setOpen] = useState(false);
   const root = useRef(null);
   const selected = options.find(option => String(option.value) === String(value)) || options[0];
+  const selectOption = option => {
+    if (option.disabled) return;
+    setOpen(false);
+    onChange(option.value);
+  };
 
   useEffect(() => {
     const close = event => {
@@ -43,7 +48,8 @@ export default function MenuSelect({ value, options, onChange, className = "", d
               aria-selected={String(option.value) === String(value)}
               key={String(option.value)}
               disabled={option.disabled}
-              onClick={() => { onChange(option.value); setOpen(false); }}
+              onPointerDown={() => selectOption(option)}
+              onClick={() => selectOption(option)}
             >
               {option.label}
             </button>

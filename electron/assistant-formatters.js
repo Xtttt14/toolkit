@@ -13,6 +13,16 @@ function validDateKey(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
 }
 
+function dateWithWeekday(value) {
+  if (!validDateKey(value)) return String(value || "");
+  const weekday = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][new Date(`${value}T12:00:00`).getDay()];
+  return `${value} (${weekday})`;
+}
+
+function formatDateRange(start, end) {
+  return `${dateWithWeekday(start)}${start === end ? "" : ` 至 ${dateWithWeekday(end)}`}`;
+}
+
 function resolveDateRange(args = {}, now = new Date()) {
   if (validDateKey(args.date)) return { start: args.date, end: args.date };
   if (/^\d{4}-\d{2}$/.test(String(args.month || ""))) {
@@ -51,7 +61,7 @@ function financeEntryLines(entry, index, includeDate = true) {
     `   金额：${entry.type === "income" ? "+" : "-"}¥${money(entry.amount)}`,
     `   标签：${entry.tag}`
   ];
-  if (includeDate) lines.push(`   日期：${entry.date}`);
+  if (includeDate) lines.push(`   日期：${dateWithWeekday(entry.date)}`);
   return lines;
 }
 
@@ -68,7 +78,7 @@ function formatFinanceEntries(entries, options = {}) {
   const grouped = Boolean(options.groupByDate || (range.start && range.end && range.start !== range.end));
   const title = options.title || "账单查询";
   const lines = [title];
-  if (range.start && range.end) lines.push(`范围：${range.start}${range.start === range.end ? "" : ` 至 ${range.end}`}`);
+  if (range.start && range.end) lines.push(`范围：${formatDateRange(range.start, range.end)}`);
   lines.push("");
   if (!list.length) lines.push("暂无符合条件的账单。\n");
   else if (grouped) {
@@ -79,13 +89,13 @@ function formatFinanceEntries(entries, options = {}) {
     }
     const dates = options.includeEmptyDates && range.start && range.end ? datesInRange(range.start, range.end) : [...byDate.keys()];
     dates.forEach((date, dateIndex) => {
-      lines.push(`【${date}】`);
+      lines.push(`【${dateWithWeekday(date)}】`);
       const daily = byDate.get(date) || [];
       if (!daily.length) lines.push("暂无记录");
-      else daily.forEach((entry, index) => lines.push(...financeEntryLines(entry, index, false)));
-      if (dateIndex < dates.length - 1) lines.push("");
+      else daily.forEach((entry, index) => lines.push(...financeEntryLines(entry, index, false), ""));
+      if (dateIndex < dates.length - 1 && lines.at(-1) !== "") lines.push("");
     });
-    lines.push("");
+    if (lines.at(-1) !== "") lines.push("");
   } else {
     list.forEach((entry, index) => lines.push(...financeEntryLines(entry, index, true), ""));
   }
@@ -101,7 +111,7 @@ function formatFinanceSummary(entries, range = {}) {
   expenseEntries.forEach(entry => byTag.set(entry.tag, (byTag.get(entry.tag) || 0) + Number(entry.amount || 0)));
   const lines = [
     "账单统计",
-    range.start && range.end ? `范围：${range.start}${range.start === range.end ? "" : ` 至 ${range.end}`}` : "范围：全部记录",
+    range.start && range.end ? `范围：${formatDateRange(range.start, range.end)}` : "范围：全部记录",
     "",
     `收入：¥${money(totals.income)}`,
     `支出：¥${money(totals.expense)}`,
@@ -137,7 +147,7 @@ function formatWaterHistory(state, args = {}, now = new Date()) {
   const lines = [
     "饮水统计",
     `范围：${resolved.start}${resolved.start === resolved.end ? "" : ` 至 ${resolved.end}`}`,
-    `杯型：${args.scope === "all" ? "全部杯型" : `${state.selectedCup.name}（${state.selectedCup.ml}ml）`}`,
+    `杯型：${args.scope === "all" ? "全部杯型" : `${state.selectedCup.name}(${state.selectedCup.ml}ml)`}`,
     "",
     `总饮水：${totalMl}ml`,
     `记录：${cups}杯`,
@@ -157,17 +167,16 @@ function formatWaterHistory(state, args = {}, now = new Date()) {
 }
 
 function formatTodoList(tasks) {
-  const lines = ["待办查询", `共${tasks.length}项`, ""];
+  const lines = [`当前待办共${tasks.length}项：`];
   if (!tasks.length) lines.push("暂无符合条件的待办。");
   tasks.forEach((task, index) => {
-    lines.push(`${index + 1}. ${task.completed ? "[已完成]" : "[未完成]"} ${task.title}`);
-    lines.push(`   优先级：${task.priority}`);
+    lines.push(`${index + 1}. ${task.completed ? "[*]" : "[ ]"}${task.title}(优先级：${task.priority})`);
     if (task.dueDate) lines.push(`   截止：${String(task.dueDate).replace("T", " ").slice(0, 16)}`);
     if (task.tags.length) lines.push(`   标签：${task.tags.join("、")}`);
     if (task.description) lines.push(`   描述：${task.description}`);
     if (task.subtasks.length) {
       lines.push(`   子任务：${task.subtasks.filter(item => item.completed).length}/${task.subtasks.length}`);
-      task.subtasks.forEach((item, subtaskIndex) => lines.push(`     ${subtaskIndex + 1}. ${item.completed ? "[已完成]" : "[未完成]"} ${item.title}`));
+      task.subtasks.forEach((item, subtaskIndex) => lines.push(`     ${subtaskIndex + 1}. ${item.completed ? "[*]" : "[ ]"}${item.title}`));
     }
   });
   return lines.join("\n");
@@ -178,7 +187,7 @@ function weekdayName(value) {
 }
 
 function teachingWeeks(course) {
-  const pattern = course.pattern && course.pattern !== "每周" ? `（${course.pattern}）` : "";
+  const pattern = course.pattern && course.pattern !== "每周" ? `(${course.pattern})` : "";
   return `${course.startWeek}-${course.endWeek}周${pattern}`;
 }
 

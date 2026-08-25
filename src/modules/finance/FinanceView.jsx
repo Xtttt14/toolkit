@@ -95,17 +95,18 @@ function Pager({ page, pages, onChange }) {
   );
 }
 
-function EntryList({ entries, onEdit, onDelete, pageSize = 4, paginate = true }) {
+function EntryList({ entries, onEdit, onDelete, pageSize = 4, paginate = true, scrollable = false }) {
   const [page, setPage] = useState(0);
-  const pages = paginate ? Math.max(1, Math.ceil(entries.length / pageSize)) : 1;
+  const usePager = paginate && !scrollable;
+  const pages = usePager ? Math.max(1, Math.ceil(entries.length / pageSize)) : 1;
   useEffect(() => setPage(current => Math.min(current, pages - 1)), [pages]);
-  const visible = paginate ? entries.slice(page * pageSize, page * pageSize + pageSize) : entries;
+  const visible = usePager ? entries.slice(page * pageSize, page * pageSize + pageSize) : entries;
 
   if (!entries.length) return <EmptyState text="这一天还没有账目" />;
 
   return (
-    <div className="finance-entry-area">
-      <div className="finance-entry-list">
+    <div className={`finance-entry-area${scrollable ? " is-scrollable" : ""}`}>
+      <div className={`finance-entry-list${scrollable ? " is-scrollable" : ""}`}>
         {visible.map(entry => {
           const Icon = iconByTag.get(entry.tag) || Tag;
           return (
@@ -126,7 +127,7 @@ function EntryList({ entries, onEdit, onDelete, pageSize = 4, paginate = true })
           );
         })}
       </div>
-      {paginate && <Pager page={page} pages={pages} onChange={setPage} />}
+      {usePager && <Pager page={page} pages={pages} onChange={setPage} />}
     </div>
   );
 }
@@ -354,7 +355,7 @@ function TodayPage({ data }) {
             </div>
           </div>
         </header>
-        <EntryList entries={selectedEntries} onEdit={editEntry} onDelete={window.financeApi.delete} />
+        <EntryList entries={selectedEntries} onEdit={editEntry} onDelete={window.financeApi.delete} scrollable />
         <div className="backup-actions">
           <button onClick={window.financeApi.importJson}><Upload size={16} />恢复JSON</button>
           <button onClick={window.financeApi.exportJson}><Download size={16} />导出JSON</button>
@@ -403,7 +404,7 @@ function EntryEditModal({ entry, data, onClose }) {
   };
 
   return createPortal(
-    <div className="finance-modal-backdrop" onMouseDown={onClose} onWheel={event => event.preventDefault()}>
+    <div className="finance-modal-backdrop" onMouseDown={onClose}>
       <section className="finance-modal entry-edit-modal" onMouseDown={event => event.stopPropagation()}>
         <header>
           <div><span>{entry.date}</span><h2>编辑账目</h2></div>

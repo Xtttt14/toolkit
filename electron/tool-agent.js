@@ -3,7 +3,7 @@ const { requestDeepSeekCompletion } = require("./deepseek-client");
 class ToolRegistry {
   constructor({ tools, execute }) { this.tools = tools; this.execute = execute; }
   description() { return JSON.stringify(this.tools); }
-  async executeCalls(calls) { return this.execute({ kind: "tool_calls", calls }); }
+  async executeCalls(calls, context) { return this.execute({ kind: "tool_calls", calls }, context); }
 }
 
 // 操作意图和澄清有效性属于 Agent 状态机，不依赖某一句中文措辞。
@@ -41,7 +41,7 @@ class ToolAgent {
         messages.push({ role: "assistant", content: raw }, { role: "user", content: requiresTool ? "当前用户明确请求使用工具，但尚未有任何真实工具结果。不要输出 final 或泛化问候；请选择合适工具，或只询问一个确实缺失的参数。" : "输出无效。只可输出 tool_calls、clarify 或 final JSON。请重新决策。" });
         continue;
       }
-      lastResult = await this.registry.executeCalls(plan.calls);
+      lastResult = await this.registry.executeCalls(plan.calls, context);
       messages.push({ role: "assistant", content: raw }, { role: "user", content: `真实工具执行结果（不可编造）：${JSON.stringify(lastResult)}。请继续调用工具，或输出 final 总结。` });
     }
     return lastResult ? { status: "completed", text: lastResult.text || "操作已执行。", result: lastResult, steps: this.maxIterations, maxed: true } : { status: "clarify", text: "我还不能确定要执行的具体操作。请补充最关键的对象或金额。", steps: this.maxIterations, maxed: true };

@@ -867,7 +867,11 @@ function financeMonthlySummary(month) {
 }
 function resolveAssistantAmount(value) {
   if (typeof value === "number") return value;
-  const expression = normalizeMathExpression(value);
+  const expression = normalizeMathExpression(value)
+    .replace(/[￥¥]/g, "")
+    .replace(/[，,]/g, "")
+    .replace(/(?:人民币|元|块钱|块)/g, "")
+    .trim();
   if (!expression || !/^[\d\s+\-*/().]+$/.test(expression)) throw new Error("金额必须是数字或仅包含加减乘除和括号的算式");
   // 先限制字符集，再执行纯算术表达式；不允许变量、属性访问或函数调用。
   const result = Function(`"use strict"; return (${expression});`)();
@@ -935,9 +939,34 @@ function executeAssistantToolCalls(calls) {
   const results = []; const references = {}; let candidates = null;
   const resolveRef = value => typeof value === "string" && value.startsWith("$") ? references[value.slice(1)]?.value ?? references[value.slice(1)]?.id ?? value : value;
   const resolveTodo = id => {
-    const data = getTodoData(); const task = data.tasks.find(item => item.id === resolveRef(id));
+    const data = getTodoData(); const requested = resolveRef(id);
+    const text = String(requested ?? "").trim();
+    const normalized = text
+      .replace(/^第?\s*\d+\s*(?:项|个|条|号)?[.、:：]?\s*/, "")
+      .replace(/[（(]\s*P[0-3]\s*[)）]\s*$/i, "")
+      .trim()
+      .toLowerCase();
+    const ordinal = typeof requested === "number"
+      ? requested
+      : Number(text.match(/^第?\s*(\d+)\s*(?:项|个|条|号)?(?:[.、:：]\s*|\s+|$)/)?.[1]);
+    const titleMatches = normalized
+      ? data.tasks.filter(item => item.title.trim().toLowerCase() === normalized)
+      : [];
+    const task = data.tasks.find(item => item.id === requested)
+      || (Number.isInteger(ordinal) && ordinal > 0 ? data.tasks[ordinal - 1] : null)
+      || (titleMatches.length === 1 ? titleMatches[0] : null);
     if (!task) throw new Error("待办不存在或尚未被引用");
     return { data, task, index: data.tasks.indexOf(task) };
+  };
+  const resolveSubtaskIndex = (task, id) => {
+    const direct = task.subtasks.findIndex(item => item.id === String(id));
+    if (direct >= 0) return direct;
+    const requested = String(id ?? "").trim().toLowerCase();
+    const byTitle = task.subtasks.map((item, index) => item.title.toLowerCase() === requested ? index : -1).filter(index => index >= 0);
+    if (byTitle.length === 1) return byTitle[0];
+    const ordinal = typeof id === "string" ? id.match(/^第?\s*(\d+)\s*(?:项|个|条|号)?(?:子任务)?$/)?.[1] : (typeof id === "number" && Number.isInteger(id) ? id : null);
+    const index = Number(ordinal) - 1;
+    return Number.isInteger(index) && index >= 0 && index < task.subtasks.length ? index : -1;
   };
   const resolvePomodoroTask = id => {
     const data = getPomodoroData(); const task = data.tasks.find(item => item.id === resolveRef(id));
@@ -999,15 +1028,15 @@ function executeAssistantToolCalls(calls) {
       const title = String(args.title || "").trim(); if (!title) throw new Error("待办缺少标题");
       const data = getTodoData(); const item = normalizeTodoTask({ title, description: args.description || "", priority: args.priority || "P3", dueDate: args.dueDate || null, reminderMinutes: args.reminderMinutes ?? 30, tags: args.tags || [], subtasks: args.subtasks || [] });
       data.tasks.push(item); data.tags = normalizeStringList([...data.tags, ...(Array.isArray(args.tags) ? args.tags : [])]); saveTodoData(data); broadcastState();
-      results.push("待办已创建\n\n" + formatTodoList([item])); references.last_todo = { id: item.id, label: label("todo", item) }; continue;
+      results.push("待办已创建\n\n" + formatTodoList([item])); references.last_todo = { id: item.id, title: item.title, label: label("todo", item), subtasks: item.subtasks.map(subtask => ({ id: subtask.id, title: subtask.title })) }; continue;
     }
     if (call.name === "todo.list") {
       const query = String(args.text || "").toLowerCase(); const tasks = getTodoData().tasks.filter(task => (!query || `${task.title} ${task.description}`.toLowerCase().includes(query)) && (args.completed == null || task.completed === args.completed) && (!args.dueDate || task.dueDate?.startsWith(args.dueDate)) && (!args.tag || task.tags.includes(args.tag)) && (!args.priority || task.priority === args.priority));
-      references.todo_matches = tasks.slice(0, 10).map(task => ({ entity: "todo", id: task.id, label: label("todo", task) }));
+      references.todo_matches = tasks.slice(0, 10).map(task => ({ entity: "todo", id: task.id, title: task.title, label: label("todo", task), subtasks: task.subtasks.map(subtask => ({ id: subtask.id, title: subtask.title })) }));
       results.push(formatTodoList(tasks.slice(0, 50))); continue;
     }
     if (call.name === "todo.update" || call.name === "todo.complete") {
-      const id = resolveRef(args.taskId); const data = getTodoData(); const index = data.tasks.findIndex(task => task.id === id); if (index < 0) throw new Error("待办不存在或尚未被引用");
+      const { data, task, index } = resolveTodo(args.taskId); const id = task.id;
       const patch = call.name === "todo.complete" ? { completed: args.completed !== false, completedAt: args.completed === false ? null : new Date().toISOString() } : (args.patch || {});
       data.tasks[index] = normalizeTodoTask({ ...data.tasks[index], ...patch, id, createdAt: data.tasks[index].createdAt, updatedAt: new Date().toISOString() }); saveTodoData(data); broadcastState(); results.push("待办已更新\n\n" + formatTodoList([data.tasks[index]])); continue;
     }
@@ -1015,7 +1044,7 @@ function executeAssistantToolCalls(calls) {
     if (["todo.subtask.add", "todo.subtask.update", "todo.subtask.delete"].includes(call.name)) {
       const { data, task } = resolveTodo(args.taskId);
       if (call.name === "todo.subtask.add") { const title = String(args.title || "").trim(); if (!title) throw new Error("子任务标题不能为空"); if (task.subtasks.length >= 8) throw new Error("每个待办最多8个子任务"); task.subtasks.push({ id: `sub-${Date.now()}-${Math.random().toString(16).slice(2)}`, title, completed: false }); }
-      else { const index = task.subtasks.findIndex(item => item.id === String(args.subtaskId)); if (index < 0) throw new Error("子任务不存在"); if (call.name === "todo.subtask.delete") task.subtasks.splice(index, 1); else { const patch = args.patch || {}; if (patch.title != null && !String(patch.title).trim()) throw new Error("子任务标题不能为空"); task.subtasks[index] = { ...task.subtasks[index], ...(patch.title == null ? {} : { title: String(patch.title).trim() }), ...(patch.completed == null ? {} : { completed: Boolean(patch.completed) }) }; } }
+      else { const index = resolveSubtaskIndex(task, args.subtaskId); if (index < 0) throw new Error("子任务不存在"); if (call.name === "todo.subtask.delete") task.subtasks.splice(index, 1); else { const patch = args.patch || {}; if (patch.title != null && !String(patch.title).trim()) throw new Error("子任务标题不能为空"); task.subtasks[index] = { ...task.subtasks[index], ...(patch.title == null ? {} : { title: String(patch.title).trim() }), ...(patch.completed == null ? {} : { completed: Boolean(patch.completed) }) }; } }
       task.updatedAt = new Date().toISOString(); saveTodoData(data); broadcastState(); results.push("子任务已更新\n\n" + formatTodoList([task])); continue;
     }
     if (call.name === "todo.reorder") { const data = getTodoData(); const ids = normalizeStringList(args.orderedIds); const byId = new Map(data.tasks.map(task => [task.id, task])); const ordered = ids.map(id => byId.get(id)).filter(Boolean); if (ordered.length !== data.tasks.length) throw new Error("排序必须包含全部待办的真实ID"); data.tasks = ordered; saveTodoData(data); broadcastState(); results.push("已调整待办顺序。"); continue; }
@@ -1067,7 +1096,7 @@ function executeAssistantToolCalls(calls) {
     if (call.name === "total.record.create") { const { data, project } = resolveTotal(args.totalName); const record = normalizeTotalProjectRecord({ amount: resolveAssistantAmount(args.amount), note: args.note, date: args.date }); if (record.amount <= 0) throw new Error("金额必须大于0"); project.records.unshift(record); project.updatedAt = new Date().toISOString(); saveFinanceData(data); broadcastFinance(); results.push(`已向总计项目「${project.name}」添加记录。\n备注：${record.note || "无备注"}\n金额：¥${money(record.amount)}\n日期：${record.date || "未设置"}`); continue; }
     if (call.name === "total.record.list") { const { data, project } = resolveTotal(args.totalName); const direct = project.records.map(record => ({ ...record, source: "独立记录" })); const linked = data.entries.filter(entry => project.linkedEntryIds.includes(entry.id)).map(entry => ({ ...entry, source: "关联账单" })); const records = [...direct, ...linked].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")) || String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, Math.max(1, Math.min(100, Number(args.limit) || 20))); results.push([`总计项目：${project.name}`, `明细：${records.length}条`, "", ...(records.length ? records.flatMap((record, index) => [`${index + 1}. 备注：${record.note || "无备注"}`, `   金额：¥${money(record.amount)}`, `   来源：${record.source}`, `   日期：${record.date || "未设置"}`, `   ID：${record.id}`]) : ["暂无明细。"])].join("\n")); continue; }
     if (call.name === "total.record.update" || call.name === "total.record.delete") { const { data, project } = resolveTotal(args.totalName); const index = project.records.findIndex(item => item.id === String(args.recordId)); if (index < 0) throw new Error("只能按ID修改或删除总计独立记录"); const before = project.records[index]; if (call.name.endsWith("delete")) project.records.splice(index, 1); else { const patch = args.patch || {}; project.records[index] = normalizeTotalProjectRecord({ ...before, ...patch, ...(patch.amount == null ? {} : { amount: resolveAssistantAmount(patch.amount) }), id: before.id, createdAt: before.createdAt, updatedAt: new Date().toISOString() }); } project.updatedAt = new Date().toISOString(); saveFinanceData(data); broadcastFinance(); results.push(`${call.name.endsWith("delete") ? "已删除" : "已更新"}总计项目「${project.name}」的独立记录。`); continue; }
-    if (call.name === "total.link_bill") { const id = resolveRef(args.entryId); const data = getFinanceData(); const entry = data.entries.find(item => item.id === id); if (!entry) throw new Error("账单不存在或尚未被引用"); const project = findWorkflowTotalProject(data, args.totalName); if (!project.linkedEntryIds.includes(id)) project.linkedEntryIds.push(id); project.updatedAt = new Date().toISOString(); saveFinanceData(data); broadcastFinance(); results.push(`已将${label("finance", entry)}关联到${label("total", project)}。`); continue; }
+    if (call.name === "total.link_bill") { const entryReference = String(args.entryId ?? "").trim(); const id = resolveRef(!entryReference || /^(?:\$last_finance|本次账单|刚新增的账单|刚刚新增的账单|最近一笔账单|上一笔账单)$/.test(entryReference) ? "$last_finance" : args.entryId); const data = getFinanceData(); const entry = data.entries.find(item => item.id === id); if (!entry) throw new Error("账单不存在或尚未被引用"); const project = findWorkflowTotalProject(data, args.totalName); if (!project.linkedEntryIds.includes(id)) project.linkedEntryIds.push(id); project.updatedAt = new Date().toISOString(); saveFinanceData(data); broadcastFinance(); results.push(`已将${label("finance", entry)}关联到${label("total", project)}。`); continue; }
     if (call.name === "total.unlink_bill") { const id = resolveRef(args.entryId); const { data, project } = resolveTotal(args.totalName); if (!project.linkedEntryIds.includes(id)) throw new Error("该账单未关联到此总计项目"); project.linkedEntryIds = project.linkedEntryIds.filter(entryId => entryId !== id); project.updatedAt = new Date().toISOString(); saveFinanceData(data); broadcastFinance(); results.push(`已取消账单与总计项目「${project.name}」的关联，原账单保留。`); continue; }
     if (call.name === "academic.schedule.query") { const data = getScheduleData(); const requestedDate = /^\d{4}-\d{2}-\d{2}$/.test(String(args.date || "")) ? String(args.date) : ""; let week = Number(args.week) || null; let weekday = Number.isInteger(Number(args.weekday)) && Number(args.weekday) >= 0 && Number(args.weekday) <= 6 ? Number(args.weekday) : null; if (requestedDate) { const date = new Date(`${requestedDate}T12:00:00`); weekday = date.getDay(); if (!data.startDate) { results.push("课表查询\n无法按具体日期查询：尚未设置开学日期，无法计算该日期对应的教学周。"); continue; } week = Math.floor((date - new Date(`${data.startDate}T12:00:00`)) / 604800000) + 1; } const courses = data.courses.filter(course => (weekday == null || course.weekday === weekday) && (!week || (week >= course.startWeek && week <= course.endWeek && (course.pattern === "每周" || (course.pattern === "单周" ? week % 2 === 1 : week % 2 === 0))))); results.push(formatScheduleCourses(courses, { date: requestedDate, week, weekday })); continue; }
     if (call.name === "academic.schedule.settings.get") { const data = getScheduleData(); results.push(`课表设置\n开学日期：${data.startDate || "未设置"}\n提醒：${data.settings.enabled ? "开启" : "关闭"}\n提前：${data.settings.reminderMinutes}分钟`); continue; }

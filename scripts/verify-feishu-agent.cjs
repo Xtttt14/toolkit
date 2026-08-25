@@ -24,8 +24,9 @@ assert.equal(extractFeishuMessageText({ message_type: "image", content: JSON.str
     apiKey: "test",
     registry: new ToolRegistry({
       tools: [],
-      execute: async plan => {
+      execute: async (plan, context) => {
         executedCalls = plan.calls;
+        assert.equal(context.openId, "test-open-id");
         return { text: `${plan.calls.length}项任务执行成功` };
       }
     }),
@@ -40,7 +41,7 @@ assert.equal(extractFeishuMessageText({ message_type: "image", content: JSON.str
       return { ok: true, json: async () => ({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify(responses[responseIndex++]) } }] }) };
     }
   });
-  const result = await agent.run("记录饮水250ml并新增待办提交周报");
+  const result = await agent.run("记录饮水250ml并新增待办提交周报", { openId: "test-open-id" });
   assert.equal(result.status, "completed");
   assert.equal(executedCalls.length, 2);
 

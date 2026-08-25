@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  BarChart3, Bell, CalendarDays, Check, ChevronLeft, ChevronRight,
-  Clock, CupSoda, Droplets, Minus, Plus, RotateCcw, Settings, Target,
+  BarChart3, Bell, Check, ChevronLeft, ChevronRight,
+  Clock, CupSoda, Droplets, Minus, Plus, RotateCcw, Target,
 } from "lucide-react";
 
 const fallbackSettings = {
@@ -78,8 +78,7 @@ function polarPosition(index, total, radius) {
   return { left: `${50 + Math.cos(angle) * radius}%`, top: `${50 + Math.sin(angle) * radius}%` };
 }
 
-export default function DrinkingView({ state, setState }) {
-  const [view, setView] = useState("cups");
+export default function DrinkingView({ state, setState, view, setView }) {
   const [draftSettings, setDraftSettings] = useState(fallbackSettings);
 
   useEffect(() => {
@@ -134,16 +133,8 @@ export default function DrinkingView({ state, setState }) {
     setDraftSettings(next); saveSettings(next);
   }
 
-  const title = view === "cups" ? "选择杯子容积" : view === "settings" ? "偏好设置" : view === "history" ? "历史统计" : "今日饮水";
-
   return (
     <div className="drinking-inner">
-      <nav className="drink-nav">
-        <button className={view === "cups" ? "active" : ""} onClick={() => setView("cups")}><CupSoda size={16} /> 容积</button>
-        <button className={view === "progress" ? "active" : ""} onClick={() => setView("progress")}><Droplets size={16} /> 进度</button>
-        <button className={view === "history" ? "active" : ""} onClick={() => setView("history")}><CalendarDays size={16} /> 历史</button>
-        <button className={view === "settings" ? "active" : ""} onClick={() => setView("settings")}><Settings size={16} /> 设置</button>
-      </nav>
       {view === "cups" && <CupList cups={draftSettings.cupProfiles} selectedCupId={s.selectedCup?.id} onChoose={chooseCup} onAdd={addCupProfile} onUpdate={updateCup} onRemove={removeCupProfile} />}
       {view === "progress" && <ProgressView state={s} setState={setState} percent={percent} remainingMl={remainingMl} updateSetting={updateSetting} />}
       {view === "history" && <HistoryView state={s} />}
@@ -257,8 +248,8 @@ function ProgressView({ state, setState, percent, remainingMl, updateSetting }) 
           {state.today.entries.length === 0 ? (
             <div className="empty-state"><Droplets size={34} /><span>还没有第一杯</span></div>
           ) : (
-            <ol className="timeline">
-              {[...state.today.entries].reverse().slice(0, 7).map((entry, index) => (
+            <ol className="timeline today-record-list">
+              {[...state.today.entries].reverse().map((entry, index) => (
                 <li key={entry.id}><span>{formatTime(entry.at)}</span><strong>第{state.today.entries.length - index}杯</strong><em>{entry.ml}ml</em></li>
               ))}
             </ol>
@@ -326,6 +317,7 @@ function HistoryView({ state }) {
   const [monthDate, setMonthDate] = useState(new Date(`${state.date || today}T00:00:00`));
   const days = state.history?.days || {};
   const selectedSummary = getDaySummary(days, selectedDate, state.selectedCup);
+  const visibleRecords = [...selectedSummary.entries].reverse();
   const targetMl = state.settings.targetCups * state.selectedCup.ml;
   const weekStats = useMemo(() => { const sel = new Date(`${selectedDate}T00:00:00`); return summarizeRange(days, daysBetween(startOfWeek(sel), 7), state.selectedCup); }, [days, selectedDate, state.selectedCup]);
   const monthStats = useMemo(() => { const count = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate(); return summarizeRange(days, daysBetween(new Date(monthDate.getFullYear(), monthDate.getMonth(), 1), count), state.selectedCup); }, [days, monthDate, state.selectedCup]);
@@ -340,8 +332,8 @@ function HistoryView({ state }) {
           <strong>{formatMonth(monthDate)}</strong>
           <button className="icon-button small" onClick={() => moveMonth(1)}><ChevronRight size={18} /></button>
         </div>
-        <div className="weekday-row">{["一","二","三","四","五","六","日"].map(d => <span key={d}>{d}</span>)}</div>
-        <div className="calendar-grid">
+        <div className="weekday-row drink-weekdays">{["一","二","三","四","五","六","日"].map(d => <span key={d}>{d}</span>)}</div>
+        <div className="calendar-grid drink-calendar-grid">
           {gridDays.map(day => {
             const key = dateKey(day);
             const summary = getDaySummary(days, key, state.selectedCup);
@@ -352,7 +344,7 @@ function HistoryView({ state }) {
               <button key={key} className={`day-cell ${inMonth ? "" : "muted"} ${key === selectedDate ? "selected" : ""} ${key === today ? "today" : ""} ${achieved ? "achieved" : ""}`}
                 onClick={() => setSelectedDate(key)} style={{ "--fill": `${Math.round(progress * 100)}%` }}>
                 <span>{day.getDate()}</span>
-                <em>{summary.cups ? `${summary.cups}杯` : ""}{achieved ? <b>达标</b> : null}</em>
+                <em>{summary.totalMl ? `${summary.totalMl}ml` : ""}{achieved ? <b>达标</b> : null}</em>
               </button>
             );
           })}
@@ -365,11 +357,13 @@ function HistoryView({ state }) {
           {selectedSummary.entries.length === 0 ? (
             <div className="empty-state compact"><Droplets size={28} /><span>这天还没有记录</span></div>
           ) : (
-            <ol className="timeline full">
-              {[...selectedSummary.entries].reverse().map((entry, index) => (
+            <div className="day-record-area">
+              <ol className="timeline full">
+                {visibleRecords.map((entry, index) => (
                 <li key={entry.id}><span>{formatTime(entry.at)}</span><strong>第{selectedSummary.entries.length - index}杯</strong><em>{entry.ml}ml</em></li>
-              ))}
-            </ol>
+                ))}
+              </ol>
+            </div>
           )}
         </div>
       </div>

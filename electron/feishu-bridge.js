@@ -39,12 +39,38 @@ function buildPlannerPrompt(text, pending, history) {
 拿到真实工具结果后，仍由你输出 final，但必须遵守以下统一排版规范：
 - 只能依据真实工具结果，不得补写、猜测、删减记录或改变统计数字。
 - 保留工具结果中的标题、字段顺序、日期分组和换行层级；可以润色提示句，但不能另创一种版式。
-- 飞书当前发送纯文本，不要输出 Markdown 标记（例如 **、###、代码围栏或表格语法）。
+- 飞书当前发送纯文本，不要输出 Markdown 标记(例如 **、###、代码围栏或表格语法)。
 - 账单明细固定按“备注、金额、标签、日期”的顺序；多日账单先输出日期标题，再列该日账单，不要把标签放在备注前。
 - 金额统一保留两位小数并带¥；同一层级每项单独换行，不要把多笔记录挤在同一行。
+- 账单查询回复必须严格参考以下纯文本版式。每笔账单的最后一个字段后必须保留一个空行；日期标题、范围和合计也不得省略：
+账单查询
+范围：2026-08-17 (周一) 至 2026-08-23 (周日)
+
+【2026-08-17 (周一)】
+1. 备注：无备注
+   金额：-¥12.00
+   标签：交通
+
+2. 备注：玉米肠
+   金额：-¥3.50
+   标签：零食
+
+合计：收入¥0.00｜支出¥15.50｜结余¥-15.50
 - 饮水历史必须保留查询范围、总饮水、杯数、有记录天数、日均、达标天数和每日明细；不得用今日状态代替历史查询。
-- 待办、专注、课表、考试及设置查询同样保留工具结果的栏目顺序，列表必须编号。
+- 待办查询必须严格使用以下纯文本版式：标题为“当前待办共N项：”；父待办同行显示“[ ]标题(优先级：P0)”。完成状态用“[*]”，未完成用“[ ]”，且状态必须紧跟在编号后、标题前。有子任务时先输出“   子任务：已完成数/总数”，再缩进列出子任务。不得把优先级或状态拆成额外行：
+当前待办共4项：
+1. [ ]简单意图评估集创建(优先级：P0) 
+2. [ ]多mcp评估集(优先级：P0) 
+3. [ ]飞书bot智能提升(优先级：P2) 
+4. [ ]折完剩余的四个折纸(优先级：P3) 
+   子任务：1/4
+     1. [*]波斯猫 
+     2. [ ]獬豸 
+     3. [ ]紫阳花 
+     4. [ ]白虎 
+- 专注、课表、考试及设置查询同样保留工具结果的栏目顺序，列表必须编号。
 金额出现算式时，先调用 math.calculate，并给 resultKey；后续账单 amount 使用 "$resultKey"。中文括号和英文括号都可传给 math.calculate。用户说“16号/16日”时，账单 date 使用本地日期所属年月的 16 日。午餐、晚餐等餐饮默认使用“三餐”标签。
+调用记账工具时，amount 只传纯数字或算式，例如 26.09、25、(123+28)/3；不要传“26.09元”“¥25”或“消费25元”。同一轮新增账单后要关联总计时，优先使用 finance.create_and_link_total；若调用 total.link_bill，entryId 必须传 "$last_finance"，省略 entryId 时仅可关联本轮刚新增的账单。
 用户写“8.16”或“8月16日”时，账单 date 使用当前年份的 08-16。
 修改既有账单时，先用 finance.list 按备注、金额、日期定位，再把返回的真实 entryId 传给 finance.update；如果用户已给出备注、金额和日期，也可以直接在 finance.update.match 传这组条件。绝不可把“备注+金额+日期”的自然语言描述填入 entryId。更新日期可传 YYYY-MM-DD 或 M-D。
 参数缺失、对象指代不唯一、金额含义不能确定时，输出 clarify；不要猜测，不要把写入请求改成待办/聊天查询。
@@ -249,7 +275,10 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
   const client = new Lark.Client({ appId, appSecret });
   const toolAgent = new ToolAgent({
     apiKey: deepSeekApiKey,
-    registry: new ToolRegistry({ tools: require("./assistant-tools").ASSISTANT_TOOLS, execute: onAction }),
+    registry: new ToolRegistry({
+      tools: require("./assistant-tools").ASSISTANT_TOOLS,
+      execute: (plan, context) => onAction(bindWorkflowReferences(plan, context?.openId))
+    }),
     validatePlan,
     systemPrompt: (_tools, context) => buildPlannerPrompt("", context?.pending || null, []),
     maxIterations: 5
@@ -283,9 +312,56 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
   const rememberReferences = (openId, references) => {
     if (!references) return; loadRuntime(openId); referencesByUser.set(openId, references); saveRuntime(openId);
   };
-  const bindWorkflowReferences = (plan, openId) => {
-    const references = referencesByUser.get(openId) || {}; const lastFinanceId = references.last_finance?.id || references.lastFinance?.id; const lastTodoId = references.last_todo?.id;
-    if (plan.kind === "tool_calls") return { ...plan, calls: plan.calls.map(call => ({ ...call, arguments: { ...call.arguments, entryId: call.arguments?.entryId === "$last_finance" ? lastFinanceId : call.arguments?.entryId, taskId: call.arguments?.taskId === "$last_todo" ? lastTodoId : call.arguments?.taskId } })) };
+    const bindWorkflowReferences = (plan, openId) => {
+      const references = referencesByUser.get(openId) || {}; const lastFinanceId = references.last_finance?.id || references.lastFinance?.id; const lastTodoId = references.last_todo?.id;
+      const todoReferences = [references.last_todo, ...(Array.isArray(references.todo_matches) ? references.todo_matches : [])].filter(item => item?.id);
+      const todoReferenceById = id => todoReferences.find(item => item.id === id);
+      const subtaskOrdinal = value => {
+        const match = typeof value === "string" ? value.match(/^第?\s*(\d+)\s*(?:项|个|条|号)?(?:子任务)?$/) : null;
+        return match ? Number(match[1]) : (typeof value === "number" && Number.isInteger(value) ? value : null);
+      };
+      const resolveTodoReference = taskId => {
+        if (taskId === "$last_todo") return lastTodoId;
+        const requested = String(taskId ?? "").trim();
+        const ordinal = requested.match(/^第?\s*(\d+)\s*(?:项|个|条|号)?(?:[.、:：]\s*|\s+|$)/);
+        const index = ordinal ? Number(ordinal[1]) : (typeof taskId === "number" && Number.isInteger(taskId) ? taskId : null);
+        // A list item may be repeated verbatim, e.g. “4. 折完剩余的四个折纸(P3)”.
+        // Prefer its original numbered result before falling back to a title match.
+        if (index && references.todo_matches?.[index - 1]?.id) return references.todo_matches[index - 1].id;
+        const normalized = requested
+          .replace(/^第?\s*\d+\s*(?:项|个|条|号)?[.、:：]?\s*/, "")
+          .replace(/[((]\s*P[0-3]\s*[))]\s*$/i, "")
+          .trim()
+          .toLowerCase();
+        const matches = todoReferences.filter(todo => (
+          todo.id === requested
+          || String(todo.title || "").trim().toLowerCase() === normalized
+          || String(todo.label || "").replace(/[((]\s*P[0-3]\s*[))]\s*$/i, "").trim().toLowerCase() === normalized
+        ));
+        return matches.length === 1 ? matches[0].id : taskId;
+      };
+      const bindTodoCall = call => {
+        const args = { ...call.arguments };
+        let taskId = resolveTodoReference(args.taskId);
+        let taskReference = todoReferenceById(taskId);
+        if (["todo.subtask.update", "todo.subtask.delete"].includes(call.name) && !taskReference) {
+          const requested = String(args.taskId ?? "").trim().toLowerCase();
+          const ordinal = subtaskOrdinal(args.taskId);
+          const parentMatches = todoReferences.filter(todo => (todo.subtasks || []).some((subtask, index) => subtask.title.toLowerCase() === requested || index + 1 === ordinal));
+          if (parentMatches.length === 1) { taskReference = parentMatches[0]; taskId = taskReference.id; }
+        }
+        if (["todo.subtask.update", "todo.subtask.delete"].includes(call.name) && taskReference) {
+          const requested = String(args.subtaskId ?? "").trim().toLowerCase();
+          const ordinal = subtaskOrdinal(args.subtaskId);
+          const matches = (taskReference.subtasks || []).filter((subtask, index) => subtask.id === args.subtaskId || subtask.title.toLowerCase() === requested || index + 1 === ordinal);
+          if (matches.length === 1) args.subtaskId = matches[0].id;
+        }
+        const entryId = args.entryId === "$last_finance"
+          ? lastFinanceId
+          : (args.entryId ?? (call.name === "total.link_bill" ? lastFinanceId : undefined));
+        return { ...call, arguments: { ...args, entryId, taskId } };
+      };
+      if (plan.kind === "tool_calls") return { ...plan, calls: plan.calls.map(bindTodoCall) };
     if (plan.kind !== "workflow") return plan;
     return { ...plan, steps: plan.steps.map(step => ({ ...step, data: { ...step.data, financeId: step.data?.financeId === "$last_finance" ? lastFinanceId : step.data?.financeId, financeRef: step.data?.financeRef === "$last_finance" ? lastFinanceId : step.data?.financeRef } })) };
   };
@@ -328,7 +404,7 @@ function startFeishuBridge({ appId, appSecret, allowedOpenId, deepSeekApiKey, on
         return void await reply(messageId, "这条消息中没有可处理的文字。请发送文本或富文本消息后重试。", openId);
       }
       rememberConversation(openId, "user", text);
-      const plannerContext = { pending: pending?.summary || null, presented: presentedCandidates(openId).map((item, index) => ({ index: index + 1, label: item.label })), references: referencesByUser.get(openId) || null };
+      const plannerContext = { openId, pending: pending?.summary || null, presented: presentedCandidates(openId).map((item, index) => ({ index: index + 1, label: item.label })), references: referencesByUser.get(openId) || null };
       const isLegacyDestructiveRequest = /(删除|删掉|撤回|取消|清空)/.test(text);
       if (!pending && !isLegacyDestructiveRequest) {
         const agent = await toolAgent.run(text, plannerContext);

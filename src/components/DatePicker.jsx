@@ -15,6 +15,7 @@ export default function DatePicker({ value, onChange, min, max, ariaLabel, class
   const rootRef = useRef(null);
   const panelRef = useRef(null);
   const selected = dateFromKey(draft);
+  const today = dateKey(new Date());
   const minKey = min || "0000-01-01";
   const maxKey = max || "9999-12-31";
 
@@ -81,7 +82,7 @@ export default function DatePicker({ value, onChange, min, max, ariaLabel, class
       {view === "date" ? <>
         <div className="date-picker-nav"><button type="button" aria-label="上个月" onClick={() => changeMonth(-1)}><ChevronLeft size={18} /></button><button type="button" className="date-picker-month-button" onClick={() => setView("month")}>{selected.getFullYear()}年{selected.getMonth() + 1}月</button><button type="button" aria-label="下个月" onClick={() => changeMonth(1)}><ChevronRight size={18} /></button></div>
         <div className="date-picker-weekdays">{["一", "二", "三", "四", "五", "六", "日"].map(day => <span key={day}>{day}</span>)}</div>
-        <div className="date-picker-days">{days.map(day => { const next = dateKey(day); const muted = day.getMonth() !== selected.getMonth(); const unavailable = next < minKey || next > maxKey; return <button type="button" key={next} disabled={unavailable} className={`${muted ? "muted" : ""} ${next === draft ? "selected" : ""}`} onClick={() => pickDay(day)}>{day.getDate()}</button>; })}</div>
+        <div className="date-picker-days">{days.map(day => { const next = dateKey(day); const muted = day.getMonth() !== selected.getMonth(); const unavailable = next < minKey || next > maxKey; return <button type="button" key={next} disabled={unavailable} aria-current={next === today ? "date" : undefined} className={`${muted ? "muted" : ""} ${next === draft ? "selected" : ""} ${next === today ? "today" : ""}`} onClick={() => pickDay(day)}>{day.getDate()}</button>; })}</div>
       </> : <div className="date-picker-year-month"><YearWheel values={years} selected={selected.getFullYear()} onChange={year => setMonth(year, selected.getMonth())}/><div className="date-picker-month-grid">{Array.from({ length: 12 }, (_, index) => index).map(month => <button type="button" key={month} className={month === selected.getMonth() ? "active" : ""} onClick={() => { setMonth(selected.getFullYear(), month); setView("date"); }}>{monthNames[month]}</button>)}</div></div>}
       {allowEmpty && value && <button type="button" className="date-picker-clear" onClick={() => { onChange(""); setOpen(false); setView("date"); }}>清除日期</button>}
     </section>, document.body)}
