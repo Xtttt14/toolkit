@@ -346,7 +346,26 @@ function TodayPage({ data }) {
 
       <section className="finance-card today-ledger">
         <header className="ledger-heading">
-          <div><h2>账目</h2></div>
+          <div className="ledger-title-area">
+            <div className="ledger-date-jumps" aria-label="账单日期快捷选择">
+              {[
+                { label: "今", offset: 0, title: "今天" },
+                { label: "昨", offset: -1, title: "昨天" },
+                { label: "前", offset: -2, title: "前天" },
+              ].map(({ label, offset, title }) => {
+                const date = dateKey(shiftDate(new Date(), offset));
+                return <button
+                  type="button"
+                  key={label}
+                  title={title}
+                  aria-label={`查看${title}账单`}
+                  className={selectedDate === date ? "active" : ""}
+                  onClick={() => { setSelectedDate(date); reset(); }}
+                >{label}</button>;
+              })}
+            </div>
+            <h2>账目</h2>
+          </div>
           <div className="ledger-date-area">
             <label><span>账单日期</span><DatePicker value={selectedDate} ariaLabel="账单日期" onChange={next => { setSelectedDate(next); reset(); }} /></label>
             <div className="today-balance">

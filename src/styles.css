@@ -263,7 +263,15 @@ h1 { margin: 0; color: #0f1720; font-size: clamp(32px, 4vw, 48px); line-height: 
 .timeline strong { color: #111820; font-weight: 650; }
 .timeline em { font-style: normal; text-align: right; }
 .info-column .history-card { min-height:0; display:grid; grid-template-rows:auto minmax(0,1fr); }
-.info-column .history-card .today-record-list { min-height:0; overflow-y:auto; padding-right:4px; scrollbar-width:thin; scrollbar-color:#bfd0d8 transparent; }
+.info-column .history-card .today-record-list {
+  min-height:0; overflow-y:auto; padding-right:4px; scrollbar-width:thin; scrollbar-color:#bfd0d8 transparent;
+  grid-auto-rows:44px; align-content:start; gap:7px;
+}
+.info-column .history-card .today-record-list li {
+  height:44px; min-height:44px; padding:0 10px;
+  grid-template-columns:58px minmax(66px,1fr) 62px;
+  border:1px solid rgba(35,45,42,.07); border-radius:8px; background:#f5f5f1;
+}
 .info-column .history-card .today-record-list::-webkit-scrollbar { width:5px; }
 .info-column .history-card .today-record-list::-webkit-scrollbar-thumb { border-radius:99px; background:#bfd0d8; }
 
@@ -1083,9 +1091,19 @@ h1 { margin: 0; color: #0f1720; font-size: clamp(32px, 4vw, 48px); line-height: 
 .cancel-edit, .backup-actions button { color:#69736f; background:#eeefeb; }
 .today-ledger { padding:clamp(15px,1.8vw,24px); display:grid; grid-template-rows:auto minmax(0,1fr) auto; gap:12px; }
 .ledger-heading { padding-bottom:10px; border-bottom:1px solid var(--finance-line); }
+.ledger-title-area { min-width:0; display:grid; justify-items:start; gap:8px; }
+.ledger-title-area h2 { margin:0; }
+.ledger-date-jumps { display:flex; align-items:center; justify-content:flex-start; gap:8px; }
+.ledger-date-jumps button {
+  width:34px; height:34px; display:grid; place-items:center; padding:0;
+  color:#5f6965; background:#efefeb; border:1px solid transparent; border-radius:50%;
+  font-size:14px; font-weight:650; line-height:1;
+}
+.ledger-date-jumps button:hover { color:#2e7faf; background:#e5f3fb; }
+.ledger-date-jumps button.active { color:#168fda; background:#b8def8; }
 .today-balance { display:flex; gap:clamp(8px,1.2vw,18px); }
-.ledger-date-area { display:grid; justify-items:end; gap:8px; }
-.ledger-date-area label { display:flex; align-items:center; gap:8px; color:var(--finance-muted); font-size:13px; font-weight:600; }
+.ledger-date-area { min-width:max-content; display:grid; justify-items:end; gap:8px; }
+.ledger-date-area label { display:flex; flex-wrap:nowrap; align-items:center; gap:8px; color:var(--finance-muted); font-size:13px; font-weight:600; white-space:nowrap; }
 .ledger-date-area input { width:136px; height:32px; padding:0 8px; border:1px solid #dfe2dd; border-radius:7px; color:var(--finance-ink); background:#fafaf7; font-size:12px; }
 .ledger-date-area input:focus { outline:0; border-color:rgba(180,138,70,.62); box-shadow:0 0 0 3px rgba(180,138,70,.08); }
 .today-balance span { color:var(--finance-muted); font-size:12px; text-align:right; }
