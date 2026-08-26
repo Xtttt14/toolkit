@@ -347,6 +347,7 @@ function TodayPage({ data }) {
       <section className="finance-card today-ledger">
         <header className="ledger-heading">
           <div className="ledger-title-area">
+            <h2>账目</h2>
             <div className="ledger-date-jumps" aria-label="账单日期快捷选择">
               {[
                 { label: "今", offset: 0, title: "今天" },
@@ -364,7 +365,6 @@ function TodayPage({ data }) {
                 >{label}</button>;
               })}
             </div>
-            <h2>账目</h2>
           </div>
           <div className="ledger-date-area">
             <label><span>账单日期</span><DatePicker value={selectedDate} ariaLabel="账单日期" onChange={next => { setSelectedDate(next); reset(); }} /></label>
