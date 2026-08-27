@@ -13,7 +13,10 @@ export function ConfirmationProvider({ children }) {
     window.appApi?.getSettings?.().then(settings => {
       if (active) setEnabled(settings?.showActionConfirmations !== false);
     });
-    return () => { active = false; };
+    const off = window.appApi?.onSettingsChanged?.(settings => {
+      setEnabled(settings?.showActionConfirmations !== false);
+    });
+    return () => { active = false; off?.(); };
   }, []);
 
   const confirm = useCallback((options = {}) => new Promise(resolve => {
