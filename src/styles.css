@@ -19,6 +19,34 @@ button, input, select, textarea { font: inherit; }
 button { border: 0; cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: 0.42; }
 
+/* Shared confirmation dialog */
+.confirmation-overlay {
+  position:fixed; z-index:1000; inset:0; display:grid; place-items:center; padding:24px;
+  background:rgba(19,27,33,.32); backdrop-filter:blur(7px); animation:confirmation-fade-in 150ms ease both;
+}
+.confirmation-dialog {
+  width:min(480px,100%); display:grid; grid-template-columns:52px minmax(0,1fr); gap:15px; padding:22px;
+  color:#26323a; background:linear-gradient(145deg,#fffefa,#f8faf8); border:1px solid rgba(167,90,65,.16); border-radius:16px;
+  box-shadow:0 24px 70px rgba(23,35,42,.22); animation:confirmation-rise-in 180ms cubic-bezier(.2,.8,.2,1) both;
+}
+.confirmation-mark { width:46px; height:46px; display:grid; place-items:center; color:#c75e45; background:#fff0ea; border:1px solid rgba(199,94,69,.13); border-radius:14px; }
+.confirmation-content { min-width:0; }
+.confirmation-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.confirmation-heading span { display:block; color:#a56a50; font-size:10px; font-weight:800; letter-spacing:.12em; }
+.confirmation-heading h2 { margin:4px 0 0; color:#26323a; font-size:19px; line-height:1.3; }
+.confirmation-heading button { width:28px; height:28px; display:grid; place-items:center; color:#8e9895; background:transparent; border-radius:8px; }
+.confirmation-heading button:hover { color:#a94734; background:#fff0ea; }
+.confirmation-content > p { margin:10px 0 0; color:#6f7d78; font-size:13px; line-height:1.65; }
+.confirmation-skip { margin-top:16px; display:inline-flex; align-items:center; gap:7px; color:#7c8682; font-size:12px; cursor:pointer; }
+.confirmation-skip input { width:15px; height:15px; accent-color:#c75e45; }
+.confirmation-dialog footer { margin-top:18px; display:flex; justify-content:flex-end; gap:8px; }
+.confirmation-dialog footer button { min-width:82px; height:36px; padding:0 13px; display:inline-flex; align-items:center; justify-content:center; gap:6px; color:#65716d; background:#edf0ed; border-radius:9px; font-size:12px; font-weight:700; }
+.confirmation-dialog footer button:hover { background:#e3e8e3; }
+.confirmation-dialog footer .confirmation-approve { color:#fff; background:#c75e45; box-shadow:0 8px 18px rgba(199,94,69,.18); }
+.confirmation-dialog footer .confirmation-approve:hover { background:#ae4d38; }
+@keyframes confirmation-fade-in { from { opacity:0; } to { opacity:1; } }
+@keyframes confirmation-rise-in { from { opacity:0; transform:translateY(8px) scale(.98); } to { opacity:1; transform:none; } }
+
 /* ═══════ App Shell ═══════ */
 .app-shell {
   width: 100%; height: 100%;
@@ -567,7 +595,7 @@ h1 { margin: 0; color: #0f1720; font-size: clamp(32px, 4vw, 48px); line-height: 
 .todo-subtask-row {
   position:relative; min-width:0; min-height:56px; display:grid;
   grid-template-columns:34px minmax(0,1fr) auto; align-items:center; gap:10px;
-  padding:9px 11px; text-align:left; color:#24302d; background:#fffefa;
+  padding:9px 11px; cursor:pointer; text-align:left; color:#24302d; background:#fffefa;
   border:1px solid rgba(35,45,42,.08); border-radius:10px;
   box-shadow:0 6px 18px rgba(39,46,43,.035);
   transition:transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
@@ -586,11 +614,11 @@ h1 { margin: 0; color: #0f1720; font-size: clamp(32px, 4vw, 48px); line-height: 
 .todo-subtask-row.drag-over-after::after { bottom:-5px; }
 .todo-subtask-index {
   width:32px; height:32px; display:grid; place-items:center; border-radius:9px;
-  color:#64706c; background:#f0f1ed; font-family:Georgia,serif; font-size:12px; font-weight:700; cursor:grab;
+  color:#64706c; background:#f0f1ed; font-family:Georgia,serif; font-size:12px; font-weight:700; cursor:pointer;
   transition:color 150ms ease, background 150ms ease, transform 150ms ease;
 }
 .todo-subtask-index:hover { color:#1478c9; background:#e8f4ff; }
-.todo-subtask-index:active { cursor:grabbing; }
+.todo-subtask-index:active { cursor:pointer; }
 .todo-subtask-copy { min-width:0; }
 .todo-subtask-copy strong, .todo-subtask-copy em { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .todo-subtask-copy strong { color:inherit; font-size:14px; }

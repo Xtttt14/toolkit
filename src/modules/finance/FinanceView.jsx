@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import MenuSelect from "../../components/MenuSelect";
 import DatePicker from "../../components/DatePicker";
+import { useConfirmation } from "../../components/Confirmation";
 
 const expenseTags = [
   ["三餐", Utensils], ["零食", Coffee], ["衣服", Shirt], ["交通", Bus], ["旅行", Plane],
@@ -731,6 +732,7 @@ function projectTotal(project, entries) {
 }
 
 function TotalProjectsPage({ data }) {
+  const confirmAction = useConfirmation();
   const [selectedId, setSelectedId] = useState(null);
   const [newProjectName, setNewProjectName] = useState("");
   const projects = data.totalProjects || [];
@@ -752,7 +754,7 @@ function TotalProjectsPage({ data }) {
     if (name?.trim() && name.trim() !== project.name) await window.financeApi.updateTotalProject(project.id, { name: name.trim() });
   };
   const deleteProject = async project => {
-    if (window.confirm(`删除“${project.name}”及其直接添加的记录吗？每日账单不会被删除。`)) {
+    if (await confirmAction({ title: `删除“${project.name}”？`, message: "直接添加的记录会一并删除；每日账单不会被删除。", confirmLabel: "删除项目" })) {
       await window.financeApi.deleteTotalProject(project.id);
     }
   };

@@ -7,6 +7,7 @@ const fallbackSettings = {
   closeAction: "hide",
   mainWindowShortcut: "Control+Shift+X",
   launchAtLogin: false,
+  showActionConfirmations: true,
   version: ""
 };
 
@@ -126,6 +127,18 @@ export default function AppSettings() {
             </div>
           </div>
           <div className="settings-callout"><ShieldCheck size={17} /><span>隐藏主窗口不会停止提醒或专注计时。</span></div>
+        </article>
+
+        <article className="app-settings-card">
+          <header>
+            <span className="settings-card-icon coral"><ShieldCheck size={20} /></span>
+            <div><span>SAFETY</span><h2>操作确认</h2></div>
+          </header>
+          <div className="app-setting-row">
+            <div><strong>删除、放弃前询问</strong><p>关闭后，删除待办、子任务、标签、项目和放弃专注将直接执行。</p></div>
+            <SettingSwitch checked={settings.showActionConfirmations} onChange={value => update({ showActionConfirmations: value })} label="操作前确认" />
+          </div>
+          <div className="settings-callout"><ShieldCheck size={17} /><span>也可在确认弹窗勾选“不再提示”，随后可在这里重新开启。</span></div>
         </article>
 
         <article className="app-settings-card">

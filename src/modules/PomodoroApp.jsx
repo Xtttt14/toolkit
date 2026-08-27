@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import DatePicker from "../components/DatePicker";
+import { useConfirmation } from "../components/Confirmation";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, BarChart3, Check, ChevronRight, Clock3, Expand,
@@ -188,6 +189,7 @@ function ImmersiveView({ data, timer, onExit, onFinish, onAbandon, onSettings })
 }
 
 function TaskEditor({ data, task, onClose }) {
+  const confirmAction = useConfirmation();
   const [title, setTitle] = useState(task?.title || "");
   const [mode, setMode] = useState(task?.mode || "countdown");
   const initialMinutes = task?.plannedSeconds ? Math.round(task.plannedSeconds / 60) : 30;
@@ -240,7 +242,7 @@ function TaskEditor({ data, task, onClose }) {
   };
 
   const deleteTag = async tag => {
-    if (!confirm(`删除标签“${tag}”？已有历史记录中的标签会保留。`)) return;
+    if (!(await confirmAction({ title: `删除标签“${tag}”？`, message: "已有历史记录会保留，但不再带有这个标签。", confirmLabel: "删除标签" }))) return;
     await window.pomodoroApi.deleteTag(tag);
     setTags(current => current.filter(item => item !== tag));
   };
@@ -315,6 +317,7 @@ function TaskEditor({ data, task, onClose }) {
 }
 
 function FocusDashboard({ data, onStart, onImmersive, onFinish, onAbandon, busy }) {
+  const confirmAction = useConfirmation();
   const timer = useTicker(data.active);
   const [selectedId, setSelectedId] = useState(data.tasks[0]?.id || "");
   const [editingTask, setEditingTask] = useState(null);
@@ -380,7 +383,7 @@ function FocusDashboard({ data, onStart, onImmersive, onFinish, onAbandon, busy 
               <span className="task-mode-icon">{task.mode === "countup" ? <Clock3 size={19} /> : <Timer size={19} />}</span>
               <span className="task-card-actions">
                 <button type="button" onClick={event => { event.stopPropagation(); setEditingTask(task); setEditorOpen(true); }} aria-label={`编辑任务${task.title}`}><Pencil size={15} /></button>
-                <button type="button" onClick={async event => { event.stopPropagation(); if (confirm(`删除专注任务“${task.title}”？历史统计不会受影响。`)) await window.pomodoroApi.deleteTask(task.id); }} aria-label={`删除任务${task.title}`}><Trash2 size={15} /></button>
+                <button type="button" onClick={async event => { event.stopPropagation(); if (await confirmAction({ title: `删除专注任务“${task.title}”？`, message: "历史统计不会受影响。", confirmLabel: "删除任务" })) await window.pomodoroApi.deleteTask(task.id); }} aria-label={`删除任务${task.title}`}><Trash2 size={15} /></button>
               </span>
               {selectedTask?.id === task.id && <i className="selected-mark"><Check size={14} /></i>}
             </article>
@@ -704,6 +707,7 @@ const pages = [
 ];
 
 export default function PomodoroApp() {
+  const confirmAction = useConfirmation();
   const navigate = useNavigate();
   const location = useLocation();
   const [data, setData] = useState(null);
@@ -757,7 +761,7 @@ export default function PomodoroApp() {
     await exitImmersive();
   };
   const abandon = async () => {
-    if (!confirm("确定放弃本次专注吗？本次用时会保留在放弃记录中。")) return;
+    if (!(await confirmAction({ title: "放弃本次专注？", message: "本次用时会保留在放弃记录中。", confirmLabel: "放弃专注" }))) return;
     await window.pomodoroApi.finish("abandoned");
     await exitImmersive();
   };

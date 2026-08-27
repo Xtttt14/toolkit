@@ -7,6 +7,7 @@ import TodoApp from "./modules/TodoApp.jsx";
 import FinanceApp from "./modules/FinanceApp.jsx";
 import PomodoroApp from "./modules/PomodoroApp.jsx";
 import { ScheduleApp, ExamsApp } from "./modules/AcademicApps.jsx";
+import { ConfirmationProvider } from "./components/Confirmation.jsx";
 
 function NavigationBridge() {
   const navigate = useNavigate();
@@ -16,6 +17,7 @@ function NavigationBridge() {
 
 export default function App() {
   return (
+    <ConfirmationProvider>
     <HashRouter>
       <NavigationBridge />
       <Routes>
@@ -29,5 +31,6 @@ export default function App() {
         <Route path="/exams/*" element={<ExamsApp />} />
       </Routes>
     </HashRouter>
+    </ConfirmationProvider>
   );
 }

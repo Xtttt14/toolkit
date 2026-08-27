@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import MenuSelect from "../../components/MenuSelect";
 import DatePicker from "../../components/DatePicker";
+import { useConfirmation } from "../../components/Confirmation";
 
 const PRIORITIES = ["P0", "P1", "P2", "P3"];
 const PRIORITY_COLORS = { P0: "#e03131", P1: "#f08c00", P2: "#2f9e44", P3: "#868e96" };
@@ -44,6 +45,7 @@ function isOverdue(date) {
 }
 
 export default function TodoView({ data, setData }) {
+  const confirmAction = useConfirmation();
   const tasks = data?.tasks || [];
   const tags = data?.tags || [];
 
@@ -212,7 +214,7 @@ export default function TodoView({ data, setData }) {
   }
 
   async function deleteInlineSubtask(task, subtask) {
-    if (!window.confirm(`删除子任务“${subtask.title}”？`)) return;
+    if (!(await confirmAction({ title: `删除子任务“${subtask.title}”？`, message: "删除后无法恢复，该步骤会从当前任务中移除。", confirmLabel: "删除子任务" }))) return;
     const result = await updateTask(task.id, {
       subtasks: task.subtasks.filter(item => item.id !== subtask.id)
     });
@@ -220,7 +222,7 @@ export default function TodoView({ data, setData }) {
   }
 
   async function deleteTask(task) {
-    if (!window.confirm(`删除任务“${task.title}”？`)) return;
+    if (!(await confirmAction({ title: `删除任务“${task.title}”？`, message: "删除后无法恢复，任务包含的子任务也会一并删除。", confirmLabel: "删除任务" }))) return;
     await runAction(() => window.todoApi.delete([task.id]), "删除任务失败");
   }
 
@@ -637,7 +639,7 @@ export default function TodoView({ data, setData }) {
         {tags.map(t => (
           <span key={t} className={`todo-tag-chip lg ${filterTag === t ? "active" : ""}`} onClick={() => setFilterTag(filterTag === t ? null : t)}>
             {t}
-            <button className="todo-tag-del" onClick={async (e) => { e.stopPropagation(); if (confirm(`删除标签"${t}"？`)) await window.todoApi.deleteTag(t); }}>
+            <button className="todo-tag-del" onClick={async (e) => { e.stopPropagation(); if (await confirmAction({ title: `删除标签“${t}”？`, message: "已有任务会保留，但不再带有这个标签。", confirmLabel: "删除标签" })) await window.todoApi.deleteTag(t); }}>
               <X size={11} />
             </button>
           </span>

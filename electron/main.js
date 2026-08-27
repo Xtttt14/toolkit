@@ -65,7 +65,8 @@ const defaultAppSettings = {
   showClosePrompt: true,
   closeAction: "hide",
   mainWindowShortcut: "Control+Shift+X",
-  launchAtLogin: false
+  launchAtLogin: false,
+  showActionConfirmations: true
 };
 const supportedMainWindowShortcuts = ["Control+Shift+X", "Control+Shift+Z", "Control+Alt+X", "Control+Alt+Z"];
 
@@ -144,7 +145,8 @@ function initStores() {
           showClosePrompt: { type: "boolean", default: true },
           closeAction: { type: "string", enum: ["hide", "quit"], default: "hide" },
           mainWindowShortcut: { type: "string", enum: supportedMainWindowShortcuts, default: "Control+Shift+X" },
-          launchAtLogin: { type: "boolean", default: false }
+          launchAtLogin: { type: "boolean", default: false },
+          showActionConfirmations: { type: "boolean", default: true }
         }
       }
     }
@@ -279,7 +281,8 @@ function normalizeAppSettings(settings = {}) {
     mainWindowShortcut: supportedMainWindowShortcuts.includes(settings.mainWindowShortcut)
       ? settings.mainWindowShortcut
       : defaultAppSettings.mainWindowShortcut,
-    launchAtLogin: Boolean(settings.launchAtLogin)
+    launchAtLogin: Boolean(settings.launchAtLogin),
+    showActionConfirmations: settings.showActionConfirmations !== false
   };
 }
 
