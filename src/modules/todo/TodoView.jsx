@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Plus, Search, Trash2, ChevronDown, ChevronUp,
-  Check, X, Calendar, Flag, AlertCircle, ListChecks, CheckCheck, GripVertical
+  Check, X, Calendar, Flag, AlertCircle, ListChecks, CheckCheck, GripVertical, Pencil
 } from "lucide-react";
 import MenuSelect from "../../components/MenuSelect";
 import DatePicker from "../../components/DatePicker";
@@ -62,6 +62,8 @@ export default function TodoView({ data, setData }) {
   const [error, setError] = useState("");
   const [taskDrag, setTaskDrag] = useState(null);
   const [subtaskDrag, setSubtaskDrag] = useState(null);
+  const [subtaskEditor, setSubtaskEditor] = useState(null);
+  const [newSubtaskTitles, setNewSubtaskTitles] = useState({});
 
   function toggleSort(field) {
     if (sortBy === field) {
@@ -189,6 +191,37 @@ export default function TodoView({ data, setData }) {
       () => window.todoApi.reorderSubtasks(task.id, orderedIds),
       "调整子任务顺序失败"
     );
+  }
+
+  async function addInlineSubtask(task) {
+    const title = (newSubtaskTitles[task.id] || "").trim();
+    if (!title || task.subtasks.length >= 8) return;
+    const result = await updateTask(task.id, {
+      subtasks: [...task.subtasks, { id: `sub-${Date.now()}-${Math.random().toString(16).slice(2)}`, title, completed: false }]
+    });
+    if (result) setNewSubtaskTitles(previous => ({ ...previous, [task.id]: "" }));
+  }
+
+  async function saveInlineSubtask(task, subtaskId) {
+    const title = (subtaskEditor?.title || "").trim();
+    if (!title) return;
+    const result = await updateTask(task.id, {
+      subtasks: task.subtasks.map(subtask => subtask.id === subtaskId ? { ...subtask, title } : subtask)
+    });
+    if (result) setSubtaskEditor(null);
+  }
+
+  async function deleteInlineSubtask(task, subtask) {
+    if (!window.confirm(`删除子任务“${subtask.title}”？`)) return;
+    const result = await updateTask(task.id, {
+      subtasks: task.subtasks.filter(item => item.id !== subtask.id)
+    });
+    if (result && subtaskEditor?.subtaskId === subtask.id) setSubtaskEditor(null);
+  }
+
+  async function deleteTask(task) {
+    if (!window.confirm(`删除任务“${task.title}”？`)) return;
+    await runAction(() => window.todoApi.delete([task.id]), "删除任务失败");
   }
 
   // Edit modal
@@ -371,7 +404,7 @@ export default function TodoView({ data, setData }) {
                 <div className="todo-main" onClick={(event) => {
                   if (selectionMode) return;
                   event.stopPropagation();
-                  if (!task.completed) setEditingId(task.id);
+                  toggleTask(task.id);
                 }}>
                   <span className="todo-title">{task.title}</span>
                   {task.description && (
@@ -400,6 +433,22 @@ export default function TodoView({ data, setData }) {
                           {task.subtasks.filter(s => s.completed).length}/{task.subtasks.length}
                         </span>
                       )}
+                      <button
+                        className="todo-icon-btn"
+                        onClick={(event) => { event.stopPropagation(); setEditingId(task.id); }}
+                        title="编辑任务"
+                        aria-label={`编辑${task.title}`}
+                      >
+                        <Pencil size={15} />
+                      </button>
+                      <button
+                        className="todo-icon-btn danger"
+                        onClick={(event) => { event.stopPropagation(); deleteTask(task); }}
+                        title="删除任务"
+                        aria-label={`删除${task.title}`}
+                      >
+                        <Trash2 size={15} />
+                      </button>
                       <button
                         className="todo-icon-btn"
                         onClick={(event) => { event.stopPropagation(); toggleExpand(task.id); }}
@@ -451,7 +500,7 @@ export default function TodoView({ data, setData }) {
                     {task.subtasks.length === 0 ? (
                       <div className="todo-subtask-empty">
                         <ListChecks size={22} />
-                        <span>编辑任务后可添加最多8个执行步骤</span>
+                        <span>还没有拆分步骤，请在下方添加</span>
                       </div>
                     ) : (
                       <div className="todo-subtask-grid">
@@ -460,14 +509,7 @@ export default function TodoView({ data, setData }) {
                             key={sub.id}
                             data-subtask-id={sub.id}
                             className={`todo-subtask-row ${sub.completed ? "completed" : ""} ${subtaskDrag?.sourceId === sub.id ? "dragging" : ""} ${subtaskDrag?.targetId === sub.id ? `drag-over-${subtaskDrag.placement}` : ""}`}
-                            role="button"
-                            tabIndex={0}
                             onClick={() => window.todoApi.toggleSubtask(task.id, sub.id)}
-                            onKeyDown={event => {
-                              if (event.key !== "Enter" && event.key !== " ") return;
-                              event.preventDefault();
-                              window.todoApi.toggleSubtask(task.id, sub.id);
-                            }}
                             onDragOver={(event) => {
                               if (subtaskDrag?.taskId !== task.id || subtaskDrag.sourceId === sub.id) return;
                               event.preventDefault();
@@ -486,14 +528,15 @@ export default function TodoView({ data, setData }) {
                               setSubtaskDrag(null);
                               await reorderSubtasks(task, currentDrag.sourceId, sub.id, currentDrag.placement);
                             }}
-                            aria-pressed={sub.completed}
                           >
-                            <span
-                              className="todo-subtask-drag"
+                            <button
+                              type="button"
+                              className="todo-subtask-index"
                               draggable
-                              title="拖拽调整步骤顺序"
-                              aria-label={`拖拽调整${sub.title}的顺序`}
-                              onClick={event => event.stopPropagation()}
+                              title="点击标记完成；拖拽调整顺序"
+                              aria-label={`${sub.completed ? "标记未完成" : "标记完成"}；拖拽调整${sub.title}的顺序`}
+                              aria-pressed={sub.completed}
+                              onClick={event => { event.stopPropagation(); window.todoApi.toggleSubtask(task.id, sub.id); }}
                               onDragStart={(event) => {
                                 event.stopPropagation();
                                 event.dataTransfer.effectAllowed = "move";
@@ -502,20 +545,47 @@ export default function TodoView({ data, setData }) {
                               }}
                               onDragEnd={() => setSubtaskDrag(null)}
                             >
-                              <GripVertical size={16} />
-                            </span>
-                            <span className="todo-subtask-index">
                               {sub.completed ? <Check size={15} /> : String(index + 1).padStart(2, "0")}
-                            </span>
+                            </button>
                             <span className="todo-subtask-copy">
-                              <strong>{sub.title}</strong>
+                              {subtaskEditor?.taskId === task.id && subtaskEditor?.subtaskId === sub.id ? (
+                                <input
+                                  value={subtaskEditor.title}
+                                  autoFocus
+                                  aria-label="修改子任务名称"
+                                  onClick={event => event.stopPropagation()}
+                                  onChange={event => setSubtaskEditor(previous => ({ ...previous, title: event.target.value }))}
+                                  onKeyDown={event => {
+                                    if (event.key === "Enter") { event.preventDefault(); saveInlineSubtask(task, sub.id); }
+                                    if (event.key === "Escape") setSubtaskEditor(null);
+                                  }}
+                                />
+                              ) : <strong>{sub.title}</strong>}
                               <em>{sub.completed ? "已完成" : "待完成"}</em>
                             </span>
-                            <span className="todo-subtask-check" aria-hidden="true">
-                              {sub.completed && <Check size={13} />}
-                            </span>
+                            <div className="todo-subtask-actions">
+                              {subtaskEditor?.taskId === task.id && subtaskEditor?.subtaskId === sub.id ? (
+                                <>
+                                  <button type="button" className="todo-icon-btn" onClick={event => { event.stopPropagation(); saveInlineSubtask(task, sub.id); }} title="保存子任务" aria-label="保存子任务"><Check size={15} /></button>
+                                  <button type="button" className="todo-icon-btn" onClick={event => { event.stopPropagation(); setSubtaskEditor(null); }} title="取消修改" aria-label="取消修改"><X size={15} /></button>
+                                </>
+                              ) : <button type="button" className="todo-icon-btn" onClick={event => { event.stopPropagation(); setSubtaskEditor({ taskId: task.id, subtaskId: sub.id, title: sub.title }); }} title="修改子任务" aria-label={`修改${sub.title}`}><Pencil size={14} /></button>}
+                              <button type="button" className="todo-icon-btn danger" onClick={event => { event.stopPropagation(); deleteInlineSubtask(task, sub); }} title="删除子任务" aria-label={`删除${sub.title}`}><Trash2 size={14} /></button>
+                            </div>
                           </div>
                         ))}
+                      </div>
+                    )}
+                    {task.subtasks.length < 8 && (
+                      <div className="todo-subtask-add">
+                        <input
+                          value={newSubtaskTitles[task.id] || ""}
+                          onChange={event => setNewSubtaskTitles(previous => ({ ...previous, [task.id]: event.target.value }))}
+                          onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); addInlineSubtask(task); } }}
+                          placeholder="添加执行步骤"
+                          aria-label="添加子任务"
+                        />
+                        <button type="button" onClick={() => addInlineSubtask(task)}><Plus size={15} />添加</button>
                       </div>
                     )}
                   </div>
