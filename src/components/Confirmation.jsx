@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 import { AlertTriangle, Check, ShieldAlert, X } from "lucide-react";
 
 const ConfirmationContext = createContext(async () => true);
+const confirmationPreferenceKey = "personal-toolbox.show-action-confirmations";
 
 export function ConfirmationProvider({ children }) {
   const [enabled, setEnabled] = useState(true);
@@ -10,11 +11,19 @@ export function ConfirmationProvider({ children }) {
 
   useEffect(() => {
     let active = true;
+    const syncEnabled = settings => {
+      const nextEnabled = settings?.showActionConfirmations !== false;
+      if (nextEnabled) window.localStorage.removeItem(confirmationPreferenceKey);
+      else window.localStorage.setItem(confirmationPreferenceKey, "false");
+      setEnabled(nextEnabled);
+    };
     window.appApi?.getSettings?.().then(settings => {
-      if (active) setEnabled(settings?.showActionConfirmations !== false);
+      if (!active) return;
+      const locallyDisabled = window.localStorage.getItem(confirmationPreferenceKey) === "false";
+      setEnabled(settings?.showActionConfirmations !== false && !locallyDisabled);
     });
     const off = window.appApi?.onSettingsChanged?.(settings => {
-      setEnabled(settings?.showActionConfirmations !== false);
+      syncEnabled(settings);
     });
     return () => { active = false; off?.(); };
   }, []);
@@ -40,8 +49,15 @@ export function ConfirmationProvider({ children }) {
 
   const approve = async () => {
     if (skipNextTime) {
+      window.localStorage.setItem(confirmationPreferenceKey, "false");
       setEnabled(false);
-      await window.appApi?.saveSettings?.({ showActionConfirmations: false });
+      close(true);
+      try {
+        await window.appApi?.saveSettings?.({ showActionConfirmations: false });
+      } catch (error) {
+        console.error("保存操作确认设置失败", error);
+      }
+      return;
     }
     close(true);
   };
