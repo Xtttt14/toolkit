@@ -398,6 +398,23 @@ function undoDrink() {
   return getWaterState();
 }
 
+function updateDrink(id, payload = {}) {
+  const key = todayKey();
+  const day = getDay(key);
+  const index = day.entries.findIndex(entry => entry.id === id);
+  if (index < 0) throw new Error("饮水记录不存在");
+  const time = String(payload.time || "");
+  const ml = Number(payload.ml);
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) throw new Error("饮水时间必须是 HH:mm 格式");
+  if (!Number.isFinite(ml) || ml <= 0) throw new Error("饮水量必须大于0");
+  day.entries[index] = { ...day.entries[index], at: new Date(`${key}T${time}:00`).toISOString(), ml };
+  day.entries.sort((a, b) => new Date(a.at) - new Date(b.at));
+  setDay(key, day);
+  clearWaterReminderState();
+  broadcastState();
+  return getWaterState();
+}
+
 function inWorkWindow(now, settings) {
   const current = now.getHours() * 60 + now.getMinutes();
   return current >= minutesOfDay(settings.workStart) && current <= minutesOfDay(settings.workEnd);
@@ -1543,6 +1560,7 @@ function quitApp() {
 ipcMain.handle("state:get", () => getWaterState());
 ipcMain.handle("drink:add", (_, payload) => addDrink(payload));
 ipcMain.handle("drink:undo", () => undoDrink());
+ipcMain.handle("drink:update", (_, { id, payload }) => updateDrink(id, payload));
 ipcMain.handle("settings:save", (_, settings) => {
   const nextSettings = { ...defaultWaterSettings, ...settings };
   nextSettings.cupProfiles = Array.isArray(nextSettings.cupProfiles) && nextSettings.cupProfiles.length

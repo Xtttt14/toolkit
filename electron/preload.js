@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld("waterApi", {
   getState: () => ipcRenderer.invoke("state:get"),
   addDrink: (payload) => ipcRenderer.invoke("drink:add", payload),
   undoDrink: () => ipcRenderer.invoke("drink:undo"),
+  updateDrink: (id, payload) => ipcRenderer.invoke("drink:update", { id, payload }),
   saveSettings: (settings) => ipcRenderer.invoke("settings:save", settings),
   requestClose: () => ipcRenderer.invoke("app:request-close"),
   getRuntimeStatus: () => ipcRenderer.invoke("app:runtime-status"),

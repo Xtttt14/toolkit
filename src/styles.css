@@ -288,6 +288,25 @@ h1 { margin: 0; color: #0f1720; font-size: clamp(32px, 4vw, 48px); line-height: 
 .empty-state { height: calc(100% - 34px); display: grid; place-items: center; align-content: center; gap: 12px; color: #8a939c; }
 .timeline { margin: 18px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; }
 .timeline li { height: 38px; display: grid; grid-template-columns: 58px minmax(66px, 1fr) 62px; align-items: center; gap: 10px; color: #7c8792; border-bottom: 1px solid #edf0f3; }
+.today-record-list li { grid-template-columns:58px minmax(54px,1fr) 54px 28px; }
+.water-record-edit { width:26px; height:26px; display:grid; place-items:center; color:#68828c; background:#edf4f5; border-radius:7px; }
+.water-record-edit:hover { color:#247e9a; background:#dff1f5; }
+.water-entry-modal-backdrop { position:fixed; inset:0; z-index:1000; display:grid; place-items:center; padding:20px; background:rgba(20,30,40,.32); backdrop-filter:blur(5px); }
+.water-entry-modal { width:min(420px,92vw); padding:24px; color:#172a34; background:#fffefa; border-radius:16px; box-shadow:0 30px 90px rgba(23,43,52,.24); }
+.water-entry-modal header { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.water-entry-modal header span { color:#7c9198; font-size:12px; letter-spacing:.08em; }
+.water-entry-modal h2 { margin:4px 0 0; font-size:24px; }
+.water-entry-modal header > button { width:34px; height:34px; display:grid; place-items:center; color:#63747a; background:#edf1f1; border-radius:8px; }
+.water-entry-modal form { display:grid; gap:16px; margin-top:24px; }
+.water-entry-modal label { display:grid; gap:7px; color:#60757d; font-size:13px; }
+.water-entry-time,.water-entry-amount { height:46px; display:flex; align-items:center; gap:9px; padding:0 13px; color:#1c3540; background:#f4f7f6; border:1px solid #dbe4e3; border-radius:9px; font-size:17px; font-weight:700; }
+.water-entry-time { width:100%; justify-content:center; color:#1f6278; background:#edf7f8; border-color:#c8e3e7; }
+.water-entry-amount input { min-width:0; flex:1; padding:0; color:#172a34; background:transparent; border:0; font:inherit; outline:0; }
+.water-entry-amount b { color:#7b9296; font-size:13px; }
+.water-entry-actions { display:flex; align-items:center; justify-content:flex-end; gap:9px; margin-top:8px; }
+.water-entry-actions > span { margin-right:auto; color:#c65346; font-size:12px; }
+.water-entry-actions button { height:38px; padding:0 14px; border-radius:9px; color:#65757a; background:#edf0ef; }
+.water-entry-actions button[type="submit"] { display:inline-flex; align-items:center; gap:7px; color:#fff; background:#1f3b44; }
 .timeline strong { color: #111820; font-weight: 650; }
 .timeline em { font-style: normal; text-align: right; }
 .info-column .history-card { min-height:0; display:grid; grid-template-rows:auto minmax(0,1fr); }
@@ -2395,7 +2414,7 @@ select option:checked { color:#fff; background:var(--select-option-bg); font-wei
 .date-picker-trigger:hover:not(:disabled), .date-picker-trigger[aria-expanded="true"] { border-color:#8caeba; background:#fbfdfe; }
 .date-picker-trigger:focus-visible { outline:2px solid rgba(22,119,200,.38); outline-offset:2px; }
 .date-picker-trigger svg { flex:0 0 auto; color:#5d7480; }
-.date-picker-panel { position:fixed; z-index:400; width:min(312px,calc(100vw - 24px)); padding:0 14px 14px; overflow:auto; color:#1d2c35; background:#fff; border:1px solid #dce5e9; border-radius:10px; box-shadow:0 16px 38px rgba(25,48,60,.2); }
+.date-picker-panel { position:fixed; z-index:1100; width:min(312px,calc(100vw - 24px)); padding:0 14px 14px; overflow:auto; color:#1d2c35; background:#fff; border:1px solid #dce5e9; border-radius:10px; box-shadow:0 16px 38px rgba(25,48,60,.2); }
 .date-picker-panel > header { display:grid; grid-template-columns:56px 1fr 56px; align-items:center; min-height:48px; border-bottom:1px solid #edf1f3; }
 .date-picker-panel > header strong { font-size:15px; text-align:center; }
 .date-picker-panel > header button { padding:7px 0; color:#1878b6; background:transparent; font-size:13px; font-weight:700; }

@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   BarChart3, Bell, Check, ChevronLeft, ChevronRight,
-  Clock, CupSoda, Droplets, Minus, Plus, RotateCcw, Target,
+  Clock, CupSoda, Droplets, Minus, Pencil, Plus, RotateCcw, Save, Target, X,
 } from "lucide-react";
 
 const fallbackSettings = {
@@ -177,6 +178,7 @@ function ProgressView({ state, setState, percent, remainingMl, updateSetting }) 
   const [manualTime, setManualTime] = useState(() => { const now = new Date(); return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`; });
   const [manualMl, setManualMl] = useState(state.selectedCup?.ml || 200);
   const [timePickerOpen, setTimePickerOpen] = useState(false);
+  const [editingEntry, setEditingEntry] = useState(null);
   const displayValue = state.settings.progressMode === "cups" ? `${state.today.cups}/${state.settings.targetCups}` : `${state.today.totalMl}/${state.today.targetMl}`;
 
   useEffect(() => { setManualMl(state.selectedCup?.ml || 200); }, [state.selectedCup?.ml]);
@@ -250,13 +252,40 @@ function ProgressView({ state, setState, percent, remainingMl, updateSetting }) 
           ) : (
             <ol className="timeline today-record-list">
               {[...state.today.entries].reverse().map((entry, index) => (
-                <li key={entry.id}><span>{formatTime(entry.at)}</span><strong>第{state.today.entries.length - index}杯</strong><em>{entry.ml}ml</em></li>
+                <li key={entry.id}><span>{formatTime(entry.at)}</span><strong>第{state.today.entries.length - index}杯</strong><em>{entry.ml}ml</em><button type="button" className="water-record-edit" onClick={() => setEditingEntry(entry)} aria-label={`修改${formatTime(entry.at)}的饮水记录`} title="修改记录"><Pencil size={14} /></button></li>
               ))}
             </ol>
           )}
         </div>
       </aside>
+      {editingEntry && <WaterEntryEditModal entry={editingEntry} onClose={() => setEditingEntry(null)} onSave={async (id, payload) => { const next = await window.waterApi.updateDrink(id, payload); setState(next); setEditingEntry(null); }} />}
     </section>
+  );
+}
+
+function WaterEntryEditModal({ entry, onClose, onSave }) {
+  const [time, setTime] = useState(() => formatTime(entry.at));
+  const [ml, setMl] = useState(() => String(entry.ml));
+  const [timePickerOpen, setTimePickerOpen] = useState(false);
+  const [message, setMessage] = useState("");
+  const submit = async event => {
+    event.preventDefault();
+    const amount = Number(ml);
+    if (!amount || amount <= 0) return setMessage("请输入大于0的饮水量");
+    await onSave(entry.id, { time, ml: amount });
+  };
+  return createPortal(
+    <div className="water-entry-modal-backdrop" onMouseDown={onClose}>
+      <section className="water-entry-modal" role="dialog" aria-modal="true" aria-label="修改饮水记录" onMouseDown={event => event.stopPropagation()}>
+        <header><div><span>今天记录</span><h2>修改饮水记录</h2></div><button type="button" onClick={onClose} aria-label="关闭"><X size={19} /></button></header>
+        <form onSubmit={submit}>
+          <label><span>饮水时间</span><button type="button" className="water-entry-time" onClick={() => setTimePickerOpen(true)}><Clock size={16} />{time}</button></label>
+          <label><span>饮水量</span><div className="water-entry-amount"><input autoFocus type="number" min="1" step="10" value={ml} onChange={event => setMl(event.target.value)} /><b>ml</b></div></label>
+          <div className="water-entry-actions"><span>{message}</span><button type="button" onClick={onClose}>取消</button><button type="submit"><Save size={16} />保存修改</button></div>
+        </form>
+        {timePickerOpen && <TimeWheelPicker value={time} onChange={setTime} onClose={() => setTimePickerOpen(false)} />}
+      </section>
+    </div>, document.body
   );
 }
 
