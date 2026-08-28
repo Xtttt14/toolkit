@@ -280,7 +280,7 @@ function WaterEntryEditModal({ entry, onClose, onSave }) {
         <header><div><span>今天记录</span><h2>修改饮水记录</h2></div><button type="button" onClick={onClose} aria-label="关闭"><X size={19} /></button></header>
         <form onSubmit={submit}>
           <label><span>饮水时间</span><button type="button" className="water-entry-time" onClick={() => setTimePickerOpen(true)}><Clock size={16} />{time}</button></label>
-          <label><span>饮水量</span><div className="water-entry-amount"><input autoFocus type="number" min="1" step="10" value={ml} onChange={event => setMl(event.target.value)} /><b>ml</b></div></label>
+          <label><span>饮水量</span><div className="water-entry-amount"><input autoFocus type="number" min="1" step="1" value={ml} onChange={event => setMl(event.target.value)} /><b>ml</b></div></label>
           <div className="water-entry-actions"><span>{message}</span><button type="button" onClick={onClose}>取消</button><button type="submit"><Save size={16} />保存修改</button></div>
         </form>
         {timePickerOpen && <TimeWheelPicker value={time} onChange={setTime} onClose={() => setTimePickerOpen(false)} />}
