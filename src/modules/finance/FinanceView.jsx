@@ -838,7 +838,7 @@ function ProjectDetail({ project, data, onBack }) {
         <section className="finance-card total-record-composer">
           <header><div><span>独立记录</span><h2>直接增加</h2></div><FilePlus2 size={20} /></header>
           <form onSubmit={addRecord}>
-            <label><span>金额</span><div><b>¥</b><input ref={amountInputRef} value={amount} inputMode="decimal" onChange={event => setAmount(event.target.value)} placeholder="0.00" /></div></label>
+            <label><span>金额</span><div className="total-record-amount"><b>¥</b><input ref={amountInputRef} value={amount} inputMode="decimal" onChange={event => setAmount(event.target.value)} placeholder="0.00" /></div></label>
             <label><span>备注（可选）</span><input value={note} maxLength={120} onChange={event => setNote(event.target.value)} placeholder="例如：10张25cm象皮纸" /></label>
             <label><span>日期（可选）</span><DatePicker value={recordDate} allowEmpty ariaLabel="记录日期" onChange={setRecordDate} /></label>
             <button type="submit"><Save size={16} />添加记录</button>
