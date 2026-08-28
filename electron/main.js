@@ -91,7 +91,7 @@ const defaultPomodoroData = {
   sessions: [],
   tags: ["深度工作", "学习", "阅读"],
   active: null,
-  settings: { clockStyle: "halo", ambience: "sunset" }
+  settings: { clockStyle: "halo", ambience: "sunset", customBackground: "" }
 };
 const fixedFinanceTags = {
   income: ["工资", "生活费", "红包", "外快", "股票", "其他"],
@@ -213,6 +213,8 @@ function maybeAcademicNotify() {
     schedule.courses.filter(c => c.weekday === weekday && week >= c.startWeek && week <= c.endWeek && (c.pattern === "每周" || (c.pattern === "单周" ? week % 2 : week % 2 === 0))).forEach(c => { const [h,m] = c.startTime.split(":").map(Number); const due = h * 60 + m - Number(schedule.settings.reminderMinutes || 0); const id = `course-${key}-${c.id}`; if (current >= due && current <= due + 1 && !sent.has(id)) { new Notification({ title: "即将上课", body: `${c.name} · ${c.startTime}${c.location ? ` · ${c.location}` : ""}` }).show(); sent.add(id); } });
   }
   const exams = getExamsData();
+  const todoSync = syncExamTodos(exams.exams, now);
+  if (todoSync.changed) broadcastState();
   if (exams.settings.enabled) exams.exams.filter(e => e.date === key).forEach(e => { const time = (e.time.match(/\d{1,2}:\d{2}/) || [""])[0]; if (!time) return; const [h,m] = time.split(":").map(Number); const due = h * 60 + m - Number(exams.settings.reminderMinutes || 0); const id = `exam-${e.id}`; if (current >= due && current <= due + 1 && !sent.has(id)) { new Notification({ title: "即将考试", body: `${e.name} · ${e.time}${e.location ? ` · ${e.location}` : ""}` }).show(); sent.add(id); } });
   appStore.set("_academicNotified", [...sent].filter(id => !id.includes(`-${key}-`) || sent.has(id)).slice(-500));
 }
@@ -231,6 +233,8 @@ function normalizeTodoTask(task = {}) {
         completed: Boolean(subtask?.completed)
       })).filter(subtask => subtask.title)
     : [];
+  const completed = Boolean(task.completed) || (subtasks.length > 0 && subtasks.every(subtask => subtask.completed));
+  if (completed) subtasks.forEach(subtask => { subtask.completed = true; });
 
   return {
     id: String(task.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`),
@@ -240,12 +244,90 @@ function normalizeTodoTask(task = {}) {
     tags: normalizeStringList(task.tags),
     dueDate: task.dueDate && !Number.isNaN(new Date(task.dueDate).getTime()) ? task.dueDate : null,
     reminderMinutes: Math.max(0, Number(task.reminderMinutes) || 0),
-    completed: Boolean(task.completed),
-    completedAt: task.completedAt || null,
+    completed,
+    completedAt: completed ? (task.completedAt || now) : null,
     createdAt: task.createdAt || now,
     updatedAt: task.updatedAt || now,
+    sourceType: task.sourceType === "exam" ? "exam" : null,
+    sourceId: task.sourceType === "exam" && task.sourceId ? String(task.sourceId) : null,
     subtasks
   };
+}
+
+function examDateTime(exam, time) {
+  return new Date(`${exam.date}T${time}:00`);
+}
+
+function getExamTiming(exam) {
+  const times = String(exam.time || "").match(/(?:[01]?\d|2[0-3]):[0-5]\d/g) || [];
+  const startTime = times[0] || "23:59";
+  let endAt = times[1] ? examDateTime(exam, times[1]) : null;
+  if (!endAt && times[0]) {
+    const durationText = String(exam.duration || "");
+    const hourMatch = durationText.match(/(\d+(?:\.\d+)?)\s*(?:小时|h)/i);
+    const minuteMatch = durationText.match(/(\d+)\s*(?:分钟|分|min)/i);
+    const durationMinutes = Math.round((Number(hourMatch?.[1]) || 0) * 60 + (Number(minuteMatch?.[1]) || 0));
+    if (durationMinutes > 0) endAt = new Date(examDateTime(exam, startTime).getTime() + durationMinutes * 60000);
+  }
+  if (!endAt || Number.isNaN(endAt.getTime())) endAt = examDateTime(exam, "23:59");
+  return { startTime, endAt };
+}
+
+function syncExamTodos(exams, now = new Date()) {
+  const data = getTodoData();
+  const byExamId = new Map(data.tasks.filter(task => task.sourceType === "exam" && task.sourceId).map(task => [task.sourceId, task]));
+  let added = 0;
+  let updated = 0;
+  let completed = 0;
+  for (const exam of exams) {
+    const { startTime, endAt } = getExamTiming(exam);
+    const existing = byExamId.get(String(exam.id));
+    if (!existing && endAt <= now) continue;
+    const title = String(exam.name || "未命名科目").endsWith("考试") ? String(exam.name) : `${exam.name}考试`;
+    const dueDate = `${exam.date}T${startTime}:00`;
+    if (!existing) {
+      const task = normalizeTodoTask({
+        id: `exam-todo-${exam.id}`,
+        title,
+        description: [exam.time, exam.location].filter(Boolean).join(" · "),
+        priority: "P0",
+        tags: ["考试"],
+        dueDate,
+        reminderMinutes: 1440,
+        sourceType: "exam",
+        sourceId: exam.id
+      });
+      data.tasks.push(task);
+      byExamId.set(String(exam.id), task);
+      added += 1;
+      continue;
+    }
+    const shouldComplete = endAt <= now;
+    const description = [exam.time, exam.location].filter(Boolean).join(" · ");
+    const tags = normalizeStringList([...existing.tags, "考试"]);
+    const metadataChanged = existing.title !== title || existing.description !== description || existing.priority !== "P0" || existing.dueDate !== dueDate || JSON.stringify(existing.tags) !== JSON.stringify(tags);
+    if (!metadataChanged && !(shouldComplete && !existing.completed)) continue;
+    const next = normalizeTodoTask({
+      ...existing,
+      title,
+      description,
+      priority: "P0",
+      tags,
+      dueDate,
+      completed: shouldComplete || existing.completed,
+      completedAt: shouldComplete ? (existing.completedAt || now.toISOString()) : existing.completedAt,
+      updatedAt: now.toISOString()
+    });
+    const index = data.tasks.findIndex(task => task.id === existing.id);
+    data.tasks[index] = next;
+    updated += 1;
+    if (shouldComplete && !existing.completed) completed += 1;
+  }
+  if (added || updated || completed) {
+    data.tags = normalizeStringList([...data.tags, "考试"]);
+    saveTodoData(data);
+  }
+  return { added, updated, completed, changed: Boolean(added || updated || completed) };
 }
 
 // ─── 应用菜单 ───
@@ -1058,6 +1140,8 @@ function executeAssistantToolCalls(calls) {
     if (call.name === "todo.update" || call.name === "todo.complete") {
       const { data, task, index } = resolveTodo(args.taskId); const id = task.id;
       const patch = call.name === "todo.complete" ? { completed: args.completed !== false, completedAt: args.completed === false ? null : new Date().toISOString() } : (args.patch || {});
+      if (patch.completed === true) patch.subtasks = task.subtasks.map(subtask => ({ ...subtask, completed: true }));
+      if (patch.completed === false) patch.subtasks = task.subtasks.map(subtask => ({ ...subtask, completed: false }));
       data.tasks[index] = normalizeTodoTask({ ...data.tasks[index], ...patch, id, createdAt: data.tasks[index].createdAt, updatedAt: new Date().toISOString() }); saveTodoData(data); broadcastState(); results.push("待办已更新\n\n" + formatTodoList([data.tasks[index]])); continue;
     }
     if (call.name === "todo.delete") { const { data, task } = resolveTodo(args.taskId); data.tasks = data.tasks.filter(item => item.id !== task.id); saveTodoData(data); broadcastState(); results.push(`已删除待办「${task.title}」。`); continue; }
@@ -1065,6 +1149,8 @@ function executeAssistantToolCalls(calls) {
       const { data, task } = resolveTodo(args.taskId);
       if (call.name === "todo.subtask.add") { const title = String(args.title || "").trim(); if (!title) throw new Error("子任务标题不能为空"); if (task.subtasks.length >= 8) throw new Error("每个待办最多8个子任务"); task.subtasks.push({ id: `sub-${Date.now()}-${Math.random().toString(16).slice(2)}`, title, completed: false }); }
       else { const index = resolveSubtaskIndex(task, args.subtaskId); if (index < 0) throw new Error("子任务不存在"); if (call.name === "todo.subtask.delete") task.subtasks.splice(index, 1); else { const patch = args.patch || {}; if (patch.title != null && !String(patch.title).trim()) throw new Error("子任务标题不能为空"); task.subtasks[index] = { ...task.subtasks[index], ...(patch.title == null ? {} : { title: String(patch.title).trim() }), ...(patch.completed == null ? {} : { completed: Boolean(patch.completed) }) }; } }
+      task.completed = task.subtasks.length > 0 && task.subtasks.every(subtask => subtask.completed);
+      task.completedAt = task.completed ? new Date().toISOString() : null;
       task.updatedAt = new Date().toISOString(); saveTodoData(data); broadcastState(); results.push("子任务已更新\n\n" + formatTodoList([task])); continue;
     }
     if (call.name === "todo.reorder") { const data = getTodoData(); const ids = normalizeStringList(args.orderedIds); const byId = new Map(data.tasks.map(task => [task.id, task])); const ordered = ids.map(id => byId.get(id)).filter(Boolean); if (ordered.length !== data.tasks.length) throw new Error("排序必须包含全部待办的真实ID"); data.tasks = ordered; saveTodoData(data); broadcastState(); results.push("已调整待办顺序。"); continue; }
@@ -1347,6 +1433,8 @@ function getPomodoroData() {
     ...defaultPomodoroData.settings,
     ...(pomodoroStore.get("settings", {}) || {})
   };
+  if (!/^data:image\/(?:png|jpeg|webp);base64,/i.test(String(settings.customBackground || ""))) settings.customBackground = "";
+  if (settings.ambience === "custom" && !settings.customBackground) settings.ambience = "sunset";
   return { version: 2, tasks, sessions, tags, active, settings, now: new Date().toISOString() };
 }
 
@@ -1360,7 +1448,10 @@ function savePomodoroData(data) {
   if (data.tags !== undefined) pomodoroStore.set("tags", normalizeStringList(data.tags).map(tag => tag.slice(0, 16)));
   if (data.active !== undefined) pomodoroStore.set("active", normalizePomodoroActive(data.active));
   if (data.settings !== undefined) {
-    pomodoroStore.set("settings", { ...defaultPomodoroData.settings, ...data.settings });
+    const settings = { ...defaultPomodoroData.settings, ...data.settings };
+    if (!/^data:image\/(?:png|jpeg|webp);base64,/i.test(String(settings.customBackground || ""))) settings.customBackground = "";
+    if (settings.ambience === "custom" && !settings.customBackground) settings.ambience = "sunset";
+    pomodoroStore.set("settings", settings);
   }
 }
 
@@ -1651,7 +1742,13 @@ ipcMain.handle("academic:schedule-import", async (_, startDate) => {
 ipcMain.handle("academic:exams-import", async () => {
   const picked = await dialog.showOpenDialog(mainWindow, { title: "导入考试信息", properties: ["openFile"], filters: [{ name: "学校考试表（DOC）", extensions: ["doc"] }] });
   if (picked.canceled || !picked.filePaths[0]) return { status: "canceled" };
-  const exams = parseExams(picked.filePaths[0]); examsStore.set("exams", [...new Map([...getExamsData().exams, ...exams].map(exam => [exam.id, exam])).values()]); broadcastAcademic(); return { status: "imported", count: exams.length };
+  const exams = parseExams(picked.filePaths[0]);
+  const merged = [...new Map([...getExamsData().exams, ...exams].map(exam => [exam.id, exam])).values()];
+  examsStore.set("exams", merged);
+  const todoSync = syncExamTodos(merged);
+  broadcastAcademic();
+  if (todoSync.changed) broadcastState();
+  return { status: "imported", count: exams.length, todoAdded: todoSync.added, todoCompleted: todoSync.completed };
 });
 ipcMain.handle("academic:schedule-settings", (_, settings = {}) => { scheduleStore.set("settings", { ...getScheduleData().settings, enabled: Boolean(settings.enabled), reminderMinutes: Math.max(0, Math.min(1440, Number(settings.reminderMinutes) || 0)) }); broadcastAcademic(); return getScheduleData(); });
 ipcMain.handle("academic:exam-settings", (_, settings = {}) => { examsStore.set("settings", { ...getExamsData().settings, enabled: Boolean(settings.enabled), reminderMinutes: Math.max(0, Math.min(10080, Number(settings.reminderMinutes) || 0)) }); broadcastAcademic(); return getExamsData(); });
@@ -1695,12 +1792,18 @@ ipcMain.handle("todo:update", (_, { id, patch }) => {
   if (idx === -1) return data;
   if (patch.title !== undefined && !String(patch.title).trim()) throw new Error("任务名称不能为空");
   const updated = { ...data.tasks[idx], ...patch, updatedAt: new Date().toISOString() };
+  if (patch.completed === true) updated.subtasks = updated.subtasks.map(subtask => ({ ...subtask, completed: true }));
+  if (patch.completed === false) updated.subtasks = updated.subtasks.map(subtask => ({ ...subtask, completed: false }));
+  if (patch.subtasks && patch.completed === undefined) {
+    updated.completed = updated.subtasks.length > 0 && updated.subtasks.every(subtask => subtask.completed);
+    updated.completedAt = updated.completed ? new Date().toISOString() : null;
+  }
   // sync tags
   if (patch.tags) {
     const allTags = new Set([...data.tags, ...patch.tags]);
     data.tags = [...allTags];
   }
-  data.tasks[idx] = updated;
+  data.tasks[idx] = normalizeTodoTask(updated);
   saveTodoData(data);
   broadcastState();
   return getTodoData();
@@ -1721,8 +1824,7 @@ ipcMain.handle("todo:toggleComplete", (_, id) => {
   task.completed = !task.completed;
   task.completedAt = task.completed ? new Date().toISOString() : null;
   task.updatedAt = new Date().toISOString();
-  // complete all subtasks too
-  if (task.completed) task.subtasks.forEach(s => { s.completed = true; });
+  task.subtasks.forEach(subtask => { subtask.completed = task.completed; });
   saveTodoData(data);
   broadcastState();
   return getTodoData();
@@ -1734,6 +1836,8 @@ ipcMain.handle("todo:toggleSubtask", (_, { taskId, subtaskId }) => {
   const sub = task.subtasks.find(s => s.id === subtaskId);
   if (!sub) return data;
   sub.completed = !sub.completed;
+  task.completed = task.subtasks.length > 0 && task.subtasks.every(item => item.completed);
+  task.completedAt = task.completed ? new Date().toISOString() : null;
   task.updatedAt = new Date().toISOString();
   saveTodoData(data);
   broadcastState();
@@ -1879,6 +1983,34 @@ ipcMain.handle("pomodoro:deleteTag", (_, tag) => {
 ipcMain.handle("pomodoro:saveSettings", (_, settings) => {
   const data = getPomodoroData();
   data.settings = { ...data.settings, ...(settings || {}) };
+  savePomodoroData(data);
+  broadcastPomodoro();
+  return getPomodoroData();
+});
+ipcMain.handle("pomodoro:importBackground", async () => {
+  const picked = await dialog.showOpenDialog(mainWindow, {
+    title: "选择沉浸模式背景",
+    properties: ["openFile"],
+    filters: [{ name: "图片", extensions: ["jpg", "jpeg", "png", "webp"] }]
+  });
+  if (picked.canceled || !picked.filePaths[0]) return { status: "canceled" };
+  const filePath = picked.filePaths[0];
+  if (fs.statSync(filePath).size > 15 * 1024 * 1024) throw new Error("背景图片不能超过15MB");
+  let image = nativeImage.createFromPath(filePath);
+  if (image.isEmpty()) throw new Error("无法读取这张图片，请更换JPG、PNG或WebP文件");
+  const size = image.getSize();
+  const scale = Math.min(1, 2560 / Math.max(size.width, size.height));
+  if (scale < 1) image = image.resize({ width: Math.round(size.width * scale), height: Math.round(size.height * scale), quality: "best" });
+  const dataUrl = image.toDataURL();
+  const data = getPomodoroData();
+  data.settings = { ...data.settings, ambience: "custom", customBackground: dataUrl };
+  savePomodoroData(data);
+  broadcastPomodoro();
+  return { status: "imported" };
+});
+ipcMain.handle("pomodoro:clearBackground", () => {
+  const data = getPomodoroData();
+  data.settings = { ...data.settings, ambience: "sunset", customBackground: "" };
   savePomodoroData(data);
   broadcastPomodoro();
   return getPomodoroData();

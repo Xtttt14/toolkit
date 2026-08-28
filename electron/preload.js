@@ -79,6 +79,8 @@ contextBridge.exposeInMainWorld("pomodoroApi", {
   addTag: (tag) => ipcRenderer.invoke("pomodoro:addTag", tag),
   deleteTag: (tag) => ipcRenderer.invoke("pomodoro:deleteTag", tag),
   saveSettings: (settings) => ipcRenderer.invoke("pomodoro:saveSettings", settings),
+  importBackground: () => ipcRenderer.invoke("pomodoro:importBackground"),
+  clearBackground: () => ipcRenderer.invoke("pomodoro:clearBackground"),
   setImmersive: (enabled) => ipcRenderer.invoke("pomodoro:setImmersive", Boolean(enabled)),
   onChanged: (callback) => {
     const listener = (_, data) => callback(data);

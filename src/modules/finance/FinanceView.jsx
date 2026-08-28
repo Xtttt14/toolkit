@@ -236,7 +236,7 @@ function BatchEntryModal({ data, initialDate, onClose }) {
   </div>;
 }
 
-function TodayPage({ data }) {
+function TodayPage({ data, focusAmount = false }) {
   const today = dateKey();
   const [type, setType] = useState("expense");
   const [amount, setAmount] = useState("");
@@ -309,7 +309,7 @@ function TodayPage({ data }) {
         <form onSubmit={saveEntry} className="entry-form">
           <label className="amount-field">
             <span>金额</span>
-            <div><b>¥</b><input value={amount} onChange={event => setAmount(event.target.value)} inputMode="decimal" placeholder="0.00" /></div>
+            <div><b>¥</b><input value={amount} onChange={event => setAmount(event.target.value)} inputMode="decimal" placeholder="0.00" autoFocus={focusAmount} /></div>
           </label>
           <div className="tag-field">
             <div className="tag-field-label"><span>选择标签</span><button type="button" onClick={() => setManageTags(type)}><Settings2 size={15} />管理</button></div>
@@ -919,9 +919,9 @@ function TotalRecordEditModal({ projectId, record, onClose }) {
   );
 }
 
-export default function FinanceView({ page, data }) {
+export default function FinanceView({ page, data, focusAmount = false }) {
   if (page === "calendar") return <CalendarPage data={data} />;
   if (page === "total-projects") return <TotalProjectsPage data={data} />;
   if (page === "reports") return <ReportsPage data={data} />;
-  return <TodayPage data={data} />;
+  return <TodayPage data={data} focusAmount={focusAmount} />;
 }

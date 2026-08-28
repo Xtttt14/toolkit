@@ -44,7 +44,7 @@ function isOverdue(date) {
   return new Date(date) < new Date(new Date().toDateString());
 }
 
-export default function TodoView({ data, setData }) {
+export default function TodoView({ data, setData, createRequest = "" }) {
   const confirmAction = useConfirmation();
   const tasks = data?.tasks || [];
   const tags = data?.tags || [];
@@ -87,10 +87,10 @@ export default function TodoView({ data, setData }) {
     }
     if (filterTag) list = list.filter(t => t.tags.includes(filterTag));
     if (filterPriority) list = list.filter(t => t.priority === filterPriority);
-    if (sortBy === "manual") return list;
-    // split completed and active
     const active = list.filter(t => !t.completed);
     const done = list.filter(t => t.completed);
+
+    if (sortBy === "manual") return showCompleted ? [...active, ...done] : active;
 
     const sortFn = (a, b) => {
       let va, vb;
@@ -231,6 +231,12 @@ export default function TodoView({ data, setData }) {
   const allFilteredSelected = filtered.length > 0 && filtered.every(task => selectedIds.has(task.id));
 
   useEffect(() => {
+    if (!createRequest) return;
+    setError("");
+    setIsCreating(true);
+  }, [createRequest]);
+
+  useEffect(() => {
     if (!selectionMode) return undefined;
     const handleKeyDown = (event) => {
       if (event.key !== "Escape" || event.isComposing) return;
@@ -333,9 +339,15 @@ export default function TodoView({ data, setData }) {
             <span>暂无任务，点击"新建任务"开始</span>
           </div>
         ) : (
-          filtered.map(task => (
+          filtered.map((task, index) => (
+            <React.Fragment key={task.id}>
+              {task.completed && (index === 0 || !filtered[index - 1].completed) && (
+                <div className="todo-completed-divider" role="separator">
+                  <span>已完成</span>
+                  <em>{filtered.filter(item => item.completed).length}项</em>
+                </div>
+              )}
             <div
-              key={task.id}
               data-task-id={task.id}
               className={`todo-task-block ${taskDrag?.sourceId === task.id ? "dragging" : ""} ${taskDrag?.targetId === task.id ? `drag-over-${taskDrag.placement}` : ""}`}
             >
@@ -594,6 +606,7 @@ export default function TodoView({ data, setData }) {
                 </div>
               )}
             </div>
+            </React.Fragment>
           ))
         )}
       </div>

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, BarChart3, Calculator, CalendarDays, FolderKanban, ReceiptText } from "lucide-react";
 import FinanceView from "./finance/FinanceView.jsx";
 
@@ -12,6 +12,7 @@ const pages = [
 
 export default function FinanceApp() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [data, setData] = useState(null);
   const [page, setPage] = useState("today");
 
@@ -65,7 +66,7 @@ export default function FinanceApp() {
             </div>
           </div>
         </header>
-        <FinanceView page={page} data={data} />
+        <FinanceView page={page} data={data} focusAmount={new URLSearchParams(location.search).get("quick") === "amount"} />
       </section>
     </main>
   );

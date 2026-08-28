@@ -4,7 +4,7 @@ import { useConfirmation } from "../components/Confirmation";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, BarChart3, Check, ChevronRight, Clock3, Expand,
-  Flag, Focus, LineChart, Pencil, Plus, RotateCcw, Settings2, Tag, Timer, Trash2, X
+  Flag, Focus, ImageOff, ImagePlus, LineChart, Pencil, Plus, RotateCcw, Settings2, Tag, Timer, Trash2, X
 } from "lucide-react";
 
 const PRESETS = [30, 60, 90, 120];
@@ -138,6 +138,8 @@ function TimerFace({ active, clockStyle, timer, compact = false }) {
 
 function ImmersiveView({ data, timer, onExit, onFinish, onAbandon, onSettings }) {
   const { active, settings } = data;
+  const [backgroundError, setBackgroundError] = useState("");
+  const [backgroundBusy, setBackgroundBusy] = useState(false);
   useEffect(() => {
     const handleKey = event => {
       if (event.key === "Escape") onExit();
@@ -146,8 +148,20 @@ function ImmersiveView({ data, timer, onExit, onFinish, onAbandon, onSettings })
     return () => window.removeEventListener("keydown", handleKey);
   }, [onExit]);
 
+  const importBackground = async () => {
+    setBackgroundBusy(true); setBackgroundError("");
+    try { await window.pomodoroApi.importBackground(); }
+    catch (error) { setBackgroundError(error?.message || "导入背景失败"); }
+    finally { setBackgroundBusy(false); }
+  };
+  const clearBackground = async () => {
+    setBackgroundError("");
+    try { await window.pomodoroApi.clearBackground(); }
+    catch (error) { setBackgroundError(error?.message || "移除背景失败"); }
+  };
+
   return (
-    <section className={`pomo-immersive ambience-${settings.ambience}`}>
+    <section className={`pomo-immersive ambience-${settings.ambience}`} style={settings.ambience === "custom" && settings.customBackground ? { backgroundImage: `linear-gradient(rgba(10,15,16,.38),rgba(10,15,16,.62)),url(${settings.customBackground})` } : undefined}>
       <div className="immersive-grain" />
       <header>
         <div className="immersive-brand"><Focus size={18} /> 专注空间</div>
@@ -182,6 +196,13 @@ function ImmersiveView({ data, timer, onExit, onFinish, onAbandon, onSettings })
           ].map(([id, label]) => (
             <button key={id} className={settings.ambience === id ? "active" : ""} onClick={() => onSettings({ ambience: id })}>{label}</button>
           ))}
+          {settings.customBackground && <button className={settings.ambience === "custom" ? "active" : ""} onClick={() => onSettings({ ambience: "custom" })}>自定义</button>}
+        </div>
+        <div className="immersive-options background-options">
+          <span>背景</span>
+          <button onClick={importBackground} disabled={backgroundBusy}><ImagePlus size={13}/>{backgroundBusy ? "导入中" : "导入图片"}</button>
+          {settings.customBackground && <button onClick={clearBackground}><ImageOff size={13}/>移除</button>}
+          {backgroundError && <em>{backgroundError}</em>}
         </div>
       </footer>
     </section>

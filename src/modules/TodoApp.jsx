@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, CheckSquare } from "lucide-react";
 import TodoView from "./todo/TodoView.jsx";
 
 export default function TodoApp() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [data, setData] = useState(null);
 
   useEffect(() => {
@@ -44,7 +45,7 @@ export default function TodoApp() {
             </div>
           </div>
         </header>
-        <TodoView data={data} setData={setData} />
+        <TodoView data={data} setData={setData} createRequest={new URLSearchParams(location.search).get("create") || ""} />
       </section>
     </main>
   );

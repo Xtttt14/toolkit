@@ -2,7 +2,7 @@
   "name": "personal-toolbox",
   "version": "2.1.4",
   "private": true,
-  "description": "个人本地工具箱 - 饮水提醒 · 待办清单 · 番茄钟 · 记账助手",
+  "description": "个人本地工具箱 - 今日仪表盘 · 饮水 · 待办 · 专注 · 记账 · 校园助手",
   "main": "electron/main.js",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 8000 --configLoader runner",
@@ -16,6 +16,7 @@
     "eval:feishu-agent": "cross-env PROMPTFOO_CONFIG_DIR=.promptfoo promptfoo eval -c promptfooconfig.agent.yaml --no-cache",
     "eval:feishu": "npm run eval:feishu-planner && npm run eval:feishu-agent",
     "test:water-reminder": "node scripts/verify-water-reminder.cjs",
+    "test:student-dashboard": "node scripts/verify-student-dashboard.cjs",
     "build": "vite build --configLoader runner",
     "dist": "npm run build && electron-builder --win nsis --publish never",
     "dist:portable": "npm run build && node scripts/build-portable.cjs"
