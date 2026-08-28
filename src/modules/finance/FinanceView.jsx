@@ -243,7 +243,7 @@ function TodayPage({ data }) {
   const [tag, setTag] = useState(expenseTags[0][0]);
   const [note, setNote] = useState("");
   const [selectedDate, setSelectedDate] = useState(today);
-  const [editingId, setEditingId] = useState(null);
+  const [editingEntry, setEditingEntry] = useState(null);
   const [manageTags, setManageTags] = useState(null);
   const [customTags, setCustomTags] = useState(null);
   const [batchAdding, setBatchAdding] = useState(false);
@@ -271,7 +271,6 @@ function TodayPage({ data }) {
     const chosenType = nextType || type;
     setAmount("");
     setNote("");
-    setEditingId(null);
     setTag((chosenType === "income" ? incomeTags : expenseTags)[0][0]);
   };
 
@@ -289,26 +288,19 @@ function TodayPage({ data }) {
       return;
     }
     const payload = { type, amount: numericAmount, tag, note: note.trim(), date: selectedDate };
-    if (editingId) await window.financeApi.update(editingId, payload);
-    else await window.financeApi.add(payload);
-    setMessage(editingId ? "账目已更新" : "账目已保存");
+    await window.financeApi.add(payload);
+    setMessage("账目已保存");
     reset();
     window.setTimeout(() => setMessage(""), 1800);
   };
 
-  const editEntry = entry => {
-    setType(entry.type);
-    setAmount(String(entry.amount));
-    setTag(entry.tag);
-    setNote(entry.note || "");
-    setEditingId(entry.id);
-  };
+  const editEntry = entry => setEditingEntry(entry);
 
   return (
     <div className="finance-page today-page">
       <section className="finance-card entry-composer">
         <div className="composer-heading">
-          <div><span>快速记录</span><h2>{editingId ? "编辑账目" : "记一笔"}</h2></div>
+          <div><span>快速记录</span><h2>记一笔</h2></div>
           <div className="type-switch">
             <button className={type === "expense" ? "active expense" : ""} onClick={() => chooseType("expense")}>支出</button>
             <button className={type === "income" ? "active income" : ""} onClick={() => chooseType("income")}>收入</button>
@@ -338,9 +330,8 @@ function TodayPage({ data }) {
           </div>
           <div className="composer-actions">
             <span className="save-message">{message}</span>
-            {editingId && <button type="button" className="cancel-edit" onClick={() => reset()}>取消</button>}
-            {!editingId && <button type="button" className="batch-add-trigger" onClick={() => setBatchAdding(true)}><Plus size={16} />批量添加</button>}
-            <button type="submit" className="save-entry"><Save size={17} />{editingId ? "保存修改" : "保存账目"}</button>
+            <button type="button" className="batch-add-trigger" onClick={() => setBatchAdding(true)}><Plus size={16} />批量添加</button>
+            <button type="submit" className="save-entry"><Save size={17} />保存账目</button>
           </div>
         </form>
       </section>
@@ -384,6 +375,7 @@ function TodayPage({ data }) {
       {manageTags && <TagManager data={data} type={manageTags} onClose={() => setManageTags(null)} />}
       {customTags && <CustomTagModal type={customTags} onClose={() => setCustomTags(null)} />}
       {batchAdding && <BatchEntryModal data={data} initialDate={selectedDate} onClose={() => setBatchAdding(false)} />}
+      {editingEntry && <EntryEditModal entry={editingEntry} data={data} onClose={() => setEditingEntry(null)} />}
     </div>
   );
 }
@@ -855,7 +847,16 @@ function ProjectDetail({ project, data, onBack }) {
         <section className="finance-card total-link-card">
           <header><div><span>每日账单</span><h2>关联已有记录</h2></div><button onClick={() => setShowLinks(value => !value)}><Link2 size={16} />{showLinks ? "收起" : "管理关联"}</button></header>
           <p>已关联 {linkedEntries.length} 笔。原账单改动或删除后，项目总额会自动同步。</p>
-          {showLinks && <><label className="total-link-date"><span>账单日期</span><DatePicker value={linkDate} ariaLabel="关联账单日期" onChange={setLinkDate} /></label><div className="total-link-list">
+          {showLinks && <><div className="total-link-date"><span>账单日期</span><div className="total-link-date-controls"><DatePicker value={linkDate} ariaLabel="关联账单日期" onChange={setLinkDate} /><div className="total-link-date-jumps" aria-label="关联账单日期快捷选择">
+            {[
+              { label: "今", offset: 0, title: "今天" },
+              { label: "昨", offset: -1, title: "昨天" },
+              { label: "前", offset: -2, title: "前天" },
+            ].map(({ label, offset, title }) => {
+              const date = dateKey(shiftDate(new Date(), offset));
+              return <button type="button" key={label} title={title} aria-label={`查看${title}账单`} className={linkDate === date ? "active" : ""} onClick={() => setLinkDate(date)}>{label}</button>;
+            })}
+          </div></div></div><div className="total-link-list">
             {selectableEntries.map(entry => {
               const checked = (project.linkedEntryIds || []).includes(entry.id);
               return <label key={entry.id}><input type="checkbox" checked={checked} onChange={() => toggleLink(entry.id)} /><span><b>{entry.note || "无备注"}</b><small>{entry.date}</small></span><strong>¥{money(entry.amount)}</strong></label>;
