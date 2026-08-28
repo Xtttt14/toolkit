@@ -73,7 +73,7 @@ export default function Home() {
     <header className="dashboard-header"><div><span className="dashboard-kicker"><Sparkles size={15} />TODAY AT A GLANCE</span><h1>{greeting}，今天也稳稳向前</h1><p>{today.toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric", weekday: "long" })}</p></div><button className="home-settings-button" type="button" onClick={() => navigate("/settings")} aria-label="打开设置"><Settings2 size={20} /><span>设置</span></button></header>
 
     <section className="dashboard-finance-hero" onClick={() => navigate("/finance")}>
-      <div className="finance-hero-heading"><span className="dashboard-card-icon"><WalletCards size={21} /></span><div><small>今日收支</small><h2>{todayEntries.length ? `今日结余${todayBalance >= 0 ? "+" : "-"}¥${money(Math.abs(todayBalance))}` : "今天还没有收支记录"}</h2><p>{todayEntries.length ? `已记录${todayEntries.length}笔，点击查看明细` : "从记录每一笔开始，更从容地安排生活"}</p></div></div>
+      <div className="finance-hero-heading"><span className="dashboard-card-icon"><WalletCards size={21} /></span><div><small>今日收支</small>{todayEntries.length ? <h2 className="finance-hero-balance"><span>今日结余</span><strong>¥{money(Math.abs(todayBalance))}</strong></h2> : <h2>今天还没有收支记录</h2>}<p>{todayEntries.length ? `已记录${todayEntries.length}笔，点击查看明细` : "从记录每一笔开始，更从容地安排生活"}</p></div></div>
       <div className="finance-hero-metrics"><span><TrendingUp size={16} /><em>收入</em><strong>¥{money(todayIncome)}</strong></span><span><TrendingDown size={16} /><em>支出</em><strong>¥{money(todayExpense)}</strong></span></div>
       <OpenIcon label="今日收支" onOpen={() => navigate("/finance")} />
     </section>
@@ -83,8 +83,8 @@ export default function Home() {
         <div className="dashboard-course-strip">{todayCourses.slice(0, 5).map(course => <span key={course.id}><b>{course.startTime}</b><strong>{course.name}</strong><em>{course.location || "地点待定"}</em></span>)}{!todayCourses.length && <div className="dashboard-course-empty"><CalendarClock size={21} />今天的时间由你安排</div>}</div>
       </DashboardCard>
 
-      <DashboardCard className="water-card water-card-medium" icon={CupSoda} eyebrow="饮水" title={`${water?.today?.totalMl || 0}ml`} detail={`目标${water?.today?.targetMl || 0}ml`} onOpen={() => navigate("/drinking")}>
-        <div className="dashboard-water-ring" style={{ "--percent": `${waterPercent}%` }}><div><Droplets size={27} strokeWidth={1.7} /><strong>{waterPercent}%</strong><span>{water?.today?.cups || 0}杯</span></div></div>
+      <DashboardCard className="water-card water-card-medium" icon={CupSoda} eyebrow="饮水" title={`今日${water?.today?.cups || 0}杯`} detail={`目标${water?.today?.targetMl || 0}ml`} onOpen={() => navigate("/drinking")}>
+        <div className="dashboard-water-ring" style={{ "--percent": `${waterPercent}%` }}><div><Droplets size={29} strokeWidth={1.7} /><strong>{water?.today?.totalMl || 0}<small>ml</small></strong><span>已完成{waterPercent}%</span></div></div>
         <button type="button" className="dashboard-water-action" onClick={event => { event.stopPropagation(); addWater(); }}><Plus size={16} />加一杯</button>
       </DashboardCard>
 

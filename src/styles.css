@@ -2436,6 +2436,9 @@ select option, select option:checked { color:inherit; background:initial; font-w
 .finance-hero-heading .dashboard-card-icon { width:44px; height:44px; flex:0 0 auto; color:#ffe0ae; background:rgba(255,255,255,.1); }
 .finance-hero-heading small { display:block; color:rgba(255,255,255,.62); font-size:10px; letter-spacing:.13em; }
 .finance-hero-heading h2 { margin:6px 0 5px; overflow:hidden; color:#fff; font-family:Georgia,"Microsoft YaHei UI",serif; font-size:clamp(22px,2.2vw,31px); font-weight:500; text-overflow:ellipsis; white-space:nowrap; }
+.finance-hero-heading .finance-hero-balance { display:flex; align-items:baseline; gap:clamp(20px,2.2vw,36px); }
+.finance-hero-balance>span { flex:0 0 auto; font-size:clamp(18px,1.5vw,23px); letter-spacing:.02em; }
+.finance-hero-balance>strong { overflow:hidden; font-family:"Bahnschrift SemiBold","DIN Alternate","Segoe UI Variable",sans-serif; font-size:clamp(27px,2.7vw,39px); font-weight:600; font-variant-numeric:tabular-nums lining-nums; letter-spacing:.015em; text-overflow:ellipsis; }
 .finance-hero-heading p { margin:0; color:rgba(255,255,255,.66); font-size:11px; }
 .finance-hero-metrics { display:flex; gap:10px; position:relative; z-index:1; }
 .finance-hero-metrics>span { min-width:132px; padding:13px 15px; display:grid; grid-template-columns:auto 1fr; align-items:center; gap:3px 7px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.1); border-radius:13px; backdrop-filter:blur(8px); }
@@ -2453,17 +2456,18 @@ select option, select option:checked { color:inherit; background:initial; font-w
 .dashboard-course-strip em { overflow:hidden; color:#87918e; font-size:9px; font-style:normal; text-overflow:ellipsis; white-space:nowrap; }
 .dashboard-course-empty { grid-column:1/-1; display:flex; align-items:center; justify-content:center; gap:9px; color:#7d8b87; background:linear-gradient(90deg,transparent,#f2f4ef,transparent); border-radius:12px; font-size:11px; }
 
-.water-card-medium { grid-column:span 4; min-height:0; aspect-ratio:1; align-items:center; }
+.water-card-medium { grid-column:span 5; min-height:0; aspect-ratio:1; align-items:center; }
 .water-card-medium>header { width:100%; align-self:stretch; }
 .water-card-medium .dashboard-card-detail { width:100%; margin-top:8px; text-align:center; }
-.dashboard-water-ring { --percent:0%; width:clamp(125px,11vw,168px); aspect-ratio:1; margin:auto 0 12px; display:grid; place-items:center; border-radius:50%; background:conic-gradient(#1597ff var(--percent),#e8edf2 var(--percent)); box-shadow:0 16px 44px rgba(21,151,255,.15); transition:--percent 520ms ease,transform 220ms ease; }
+.dashboard-water-ring { --percent:0%; width:clamp(150px,13vw,198px); aspect-ratio:1; margin:auto 0 14px; display:grid; place-items:center; border-radius:50%; background:conic-gradient(#1597ff var(--percent),#e8edf2 var(--percent)); box-shadow:0 18px 50px rgba(21,151,255,.16); transition:--percent 520ms ease,transform 220ms ease; }
 .dashboard-water-ring>div { width:76%; aspect-ratio:1; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#1597ff; background:linear-gradient(180deg,#fff,#f4faff); border-radius:50%; }
-.dashboard-water-ring strong { margin:4px 0 1px; color:#263b42; font-size:24px; line-height:1; font-variant-numeric:tabular-nums; }
+.dashboard-water-ring strong { margin:6px 0 2px; color:#263b42; font-family:"Bahnschrift SemiBold","Segoe UI Variable",sans-serif; font-size:clamp(25px,2.25vw,34px); font-weight:600; line-height:1; font-variant-numeric:tabular-nums lining-nums; }
+.dashboard-water-ring strong small { display:inline; margin-left:3px; color:#6e858c; font-size:.42em; font-weight:650; letter-spacing:0; }
 .dashboard-water-ring span { color:#7c8c91; font-size:9px; }
 .dashboard-water-action { height:36px; padding:0 15px; display:flex; align-items:center; gap:7px; color:#fff; background:#3986a0; border-radius:10px; font-size:10px; font-weight:750; box-shadow:0 8px 18px rgba(57,134,160,.2); }
 .dashboard-water-action:hover { background:#2e7690; transform:translateY(-1px); }
 
-.todo-card-medium { grid-column:span 8; min-height:0; }
+.todo-card-medium { grid-column:span 7; min-height:0; }
 .dashboard-todo-list { margin-top:14px; display:grid; gap:8px; }
 .dashboard-todo-item { min-width:0; min-height:43px; padding:7px 10px; display:grid; grid-template-columns:25px minmax(0,1fr) auto; align-items:center; gap:10px; background:#f5f5f0; border:1px solid rgba(54,69,63,.06); border-radius:10px; }
 .dashboard-todo-item>button { width:22px; height:22px; display:grid; place-items:center; color:transparent; background:#fff; border:1.5px solid #aab5b0; border-radius:50%; transition:color 150ms ease,background 150ms ease,border-color 150ms ease; }

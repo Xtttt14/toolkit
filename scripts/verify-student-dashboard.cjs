@@ -16,7 +16,8 @@ const readme = read("README.md");
 const checks = [
   [!readme.includes("桌面组件") && !css.includes("widget-") && !css.includes("desktop-widget"), "桌面组件说明或样式仍有残留"],
   [home.includes("dashboard-finance-hero") && home.includes("schedule-card-large") && home.includes("water-card-medium") && home.includes("todo-card-medium"), "今日仪表盘组件层级不完整"],
-  [home.includes("dashboard-water-ring") && home.includes("加一杯") && home.includes("toggleComplete") && !home.includes("快速记账") && !home.includes("新建任务"), "首页快捷操作或卡片内交互不符合要求"],
+  [home.includes("dashboard-water-ring") && home.includes("totalMl") && home.includes("加一杯") && home.includes("toggleComplete") && !home.includes("快速记账") && !home.includes("新建任务"), "首页快捷操作或卡片内交互不符合要求"],
+  [home.includes("finance-hero-balance") && home.includes("money(Math.abs(todayBalance))") && !home.includes('todayBalance >= 0 ? "+" : "-"'), "首页今日结余金额排版不符合要求"],
   [main.includes("function syncExamTodos") && main.includes('priority: "P0"') && main.includes('tags: ["考试"]') && main.includes("if (!existing && endAt <= now) continue"), "考试同步Todo规则不完整"],
   [main.includes('sourceType: "exam"') && main.includes('sourceId: exam.id'), "考试Todo缺少稳定来源标识"],
   [main.includes("task.subtasks.forEach(subtask => { subtask.completed = task.completed; })") && main.includes("task.subtasks.every(item => item.completed)"), "Todo父子完成状态联动不完整"],
