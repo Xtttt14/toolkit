@@ -49,10 +49,16 @@ export default function Home() {
     return (schedule.courses || []).filter(course => course.weekday === today.getDay() && week >= course.startWeek && week <= course.endWeek && (course.pattern === "每周" || (course.pattern === "单周" ? week % 2 : week % 2 === 0))).sort((a, b) => a.startTime.localeCompare(b.startTime));
   }, [schedule, todayId]);
   const futureExams = useMemo(() => (exams?.exams || []).filter(exam => exam.date >= todayId).sort((a, b) => a.date.localeCompare(b.date) || String(a.time).localeCompare(String(b.time))), [exams, todayId]);
-  const todayEntries = (finance?.entries || []).filter(entry => entry.date === todayId);
+  const financeEntries = finance?.entries || [];
+  const monthId = todayId.slice(0, 7);
+  const monthEntries = financeEntries.filter(entry => String(entry.date || "").startsWith(`${monthId}-`));
+  const monthExpense = monthEntries.filter(entry => entry.type === "expense").reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+  const monthIncome = monthEntries.filter(entry => entry.type === "income").reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+  const monthBalance = monthIncome - monthExpense;
+  const balanceSign = monthBalance < 0 ? "-" : "";
+  const todayEntries = financeEntries.filter(entry => entry.date === todayId);
   const todayExpense = todayEntries.filter(entry => entry.type === "expense").reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
   const todayIncome = todayEntries.filter(entry => entry.type === "income").reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
-  const todayBalance = todayIncome - todayExpense;
   const todaySessions = (pomodoro?.sessions || []).filter(session => String(session.endedAt || "").startsWith(todayId) && session.status === "completed");
   const focusMinutes = Math.round(todaySessions.reduce((sum, session) => sum + Number(session.durationSeconds || 0), 0) / 60);
   const waterPercent = Math.min(100, Math.round(((water?.today?.totalMl || 0) / Math.max(1, water?.today?.targetMl || 1)) * 100));
@@ -73,9 +79,9 @@ export default function Home() {
     <header className="dashboard-header"><div><span className="dashboard-kicker"><Sparkles size={15} />TODAY AT A GLANCE</span><h1>{greeting}，今天也稳稳向前</h1><p>{today.toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric", weekday: "long" })}</p></div><button className="home-settings-button" type="button" onClick={() => navigate("/settings")} aria-label="打开设置"><Settings2 size={20} /><span>设置</span></button></header>
 
     <section className="dashboard-finance-hero" onClick={() => navigate("/finance")}>
-      <div className="finance-hero-heading"><span className="dashboard-card-icon"><WalletCards size={21} /></span><div><small>今日收支</small>{todayEntries.length ? <h2 className="finance-hero-balance"><span>今日结余</span><strong>¥{money(Math.abs(todayBalance))}</strong></h2> : <h2>今天还没有收支记录</h2>}<p>{todayEntries.length ? `已记录${todayEntries.length}笔，点击查看明细` : "从记录每一笔开始，更从容地安排生活"}</p></div></div>
-      <div className="finance-hero-metrics"><span><TrendingUp size={16} /><em>收入</em><strong>¥{money(todayIncome)}</strong></span><span><TrendingDown size={16} /><em>支出</em><strong>¥{money(todayExpense)}</strong></span></div>
-      <OpenIcon label="今日收支" onOpen={() => navigate("/finance")} />
+      <div className="finance-hero-heading"><span className="dashboard-card-icon"><WalletCards size={21} /></span><div><small>收支概览</small>{monthEntries.length ? <h2 className="finance-hero-balance"><span>本月结余</span><strong>{balanceSign}{money(Math.abs(monthBalance))}</strong></h2> : <h2>本月还没有收支记录</h2>}<p>{monthEntries.length ? `本月已记录${monthEntries.length}笔 · 今日${todayEntries.length}笔` : "从记录每一笔开始，更从容地安排生活"}</p></div></div>
+      <div className="finance-hero-metrics"><span><TrendingUp size={16} /><em>今日收入</em><strong>¥{money(todayIncome)}</strong></span><span><TrendingDown size={16} /><em>今日支出</em><strong>¥{money(todayExpense)}</strong></span></div>
+      <OpenIcon label="收支概览" onOpen={() => navigate("/finance")} />
     </section>
 
     <section className="dashboard-grid">

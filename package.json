@@ -20,6 +20,7 @@
     "test:startup-launch": "node scripts/verify-startup-launch.cjs",
     "test:custom-shortcut": "node scripts/verify-custom-shortcut.cjs",
     "test:custom-shortcut-ui": "electron scripts/verify-custom-shortcut-ui.cjs",
+    "test:dashboard-finance-ui": "electron scripts/verify-dashboard-finance-ui.cjs",
     "build": "vite build --configLoader runner",
     "dist": "npm run build && electron-builder --win nsis --publish never",
     "dist:portable": "npm run build && node scripts/build-portable.cjs"
