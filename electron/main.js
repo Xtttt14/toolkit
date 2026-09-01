@@ -21,6 +21,7 @@ const {
 } = require("./assistant-formatters");
 
 const isDev = !app.isPackaged;
+const isStartupLaunch = process.argv.includes("--hidden");
 const waterReminderSessionStartedAt = new Date();
 const userDataPath = process.env.PERSONAL_TOOLBOX_USER_DATA
   || path.join(app.getPath("appData"), "personal-toolbox");
@@ -578,7 +579,7 @@ function getAssetPath(name) {
 }
 
 function loadRendererRoute(window, route = "/") {
-  if (isDev) {
+  if (isDev && !isStartupLaunch) {
     return window.loadURL(`http://127.0.0.1:8000/#${route}`);
   }
   return window.loadFile(path.join(__dirname, "../dist/index.html"), { hash: route });
@@ -596,12 +597,18 @@ function navigateMainWindow(route = "/") {
   else send();
 }
 
+function syncLoginItemSettings(openAtLogin) {
+  const pathToLaunch = process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
+  const args = isDev ? [app.getAppPath(), "--hidden"] : ["--hidden"];
+  app.setLoginItemSettings({ openAtLogin: Boolean(openAtLogin), path: pathToLaunch, args });
+}
+
 function applyAppSettings(patch = {}) {
   const current = getAppSettings();
   const next = normalizeAppSettings({ ...current, ...(patch || {}) });
   appStore.set("settings", next);
   if (patch && Object.prototype.hasOwnProperty.call(patch, "launchAtLogin")) {
-    app.setLoginItemSettings({ openAtLogin: next.launchAtLogin, path: process.execPath });
+    syncLoginItemSettings(next.launchAtLogin);
   }
   broadcastAppSettings();
   updateTray();
@@ -1542,7 +1549,9 @@ function createWindow() {
       nodeIntegration: false
     }
   });
-  mainWindow.once("ready-to-show", () => mainWindow.show());
+  mainWindow.once("ready-to-show", () => {
+    if (!isStartupLaunch) mainWindow.show();
+  });
   mainWindow.on("close", async (event) => {
     const settings = getAppSettings();
     if (isQuitting || pendingClose) return;
@@ -2249,6 +2258,7 @@ ipcMain.handle("finance:import", async () => {
 app.whenReady().then(() => {
   if (!hasSingleInstanceLock) return;
   initStores();
+  syncLoginItemSettings(getAppSettings().launchAtLogin);
   app.setAppUserModelId("local.personal.toolbox");
   createAppMenu();
   ensureTray();

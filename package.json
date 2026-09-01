@@ -17,6 +17,7 @@
     "eval:feishu": "npm run eval:feishu-planner && npm run eval:feishu-agent",
     "test:water-reminder": "node scripts/verify-water-reminder.cjs",
     "test:student-dashboard": "node scripts/verify-student-dashboard.cjs",
+    "test:startup-launch": "node scripts/verify-startup-launch.cjs",
     "build": "vite build --configLoader runner",
     "dist": "npm run build && electron-builder --win nsis --publish never",
     "dist:portable": "npm run build && node scripts/build-portable.cjs"
