@@ -69,7 +69,20 @@ const defaultAppSettings = {
   launchAtLogin: false,
   showActionConfirmations: true
 };
-const supportedMainWindowShortcuts = ["Control+Shift+X", "Control+Shift+Z", "Control+Alt+X", "Control+Alt+Z"];
+const shortcutModifiers = new Set(["Control", "Command", "CommandOrControl", "Alt", "Option", "Shift", "Super", "Meta"]);
+const shortcutKeyPattern = /^(?:[A-Z0-9]|F(?:[1-9]|1\d|2[0-4])|Plus|-|Space|Tab|Enter|Backspace|Delete|Insert|Home|End|PageUp|PageDown|Up|Down|Left|Right|Escape|num(?:[0-9]|add|sub|mult|div|dec))$/i;
+
+function normalizeMainWindowShortcut(value) {
+  const shortcut = String(value || "").trim();
+  if (!shortcut || shortcut.length > 80) return null;
+  const parts = shortcut.split("+").map(part => part.trim()).filter(Boolean);
+  const keys = parts.filter(part => !shortcutModifiers.has(part));
+  const modifiers = parts.filter(part => shortcutModifiers.has(part));
+  const hasPrimaryModifier = modifiers.some(part => ["Control", "Command", "CommandOrControl", "Alt", "Option", "Super", "Meta"].includes(part));
+  if (keys.length !== 1 || !shortcutKeyPattern.test(keys[0]) || new Set(parts).size !== parts.length) return null;
+  if (!hasPrimaryModifier && !/^F(?:[1-9]|1\d|2[0-4])$/i.test(keys[0])) return null;
+  return [...modifiers, keys[0]].join("+");
+}
 
 // ─── 待办 默认设置 ───
 const defaultTodoData = {
@@ -145,7 +158,7 @@ function initStores() {
         properties: {
           showClosePrompt: { type: "boolean", default: true },
           closeAction: { type: "string", enum: ["hide", "quit"], default: "hide" },
-          mainWindowShortcut: { type: "string", enum: supportedMainWindowShortcuts, default: "Control+Shift+X" },
+          mainWindowShortcut: { type: "string", default: "Control+Shift+X" },
           launchAtLogin: { type: "boolean", default: false },
           showActionConfirmations: { type: "boolean", default: true }
         }
@@ -361,9 +374,7 @@ function normalizeAppSettings(settings = {}) {
   return {
     showClosePrompt: settings.showClosePrompt !== false,
     closeAction: settings.closeAction === "quit" ? "quit" : "hide",
-    mainWindowShortcut: supportedMainWindowShortcuts.includes(settings.mainWindowShortcut)
-      ? settings.mainWindowShortcut
-      : defaultAppSettings.mainWindowShortcut,
+    mainWindowShortcut: normalizeMainWindowShortcut(settings.mainWindowShortcut) || defaultAppSettings.mainWindowShortcut,
     launchAtLogin: Boolean(settings.launchAtLogin),
     showActionConfirmations: settings.showActionConfirmations !== false
   };
@@ -605,7 +616,13 @@ function syncLoginItemSettings(openAtLogin) {
 
 function applyAppSettings(patch = {}) {
   const current = getAppSettings();
-  const next = normalizeAppSettings({ ...current, ...(patch || {}) });
+  const hasShortcutPatch = patch && Object.prototype.hasOwnProperty.call(patch, "mainWindowShortcut");
+  const requestedShortcut = hasShortcutPatch ? normalizeMainWindowShortcut(patch.mainWindowShortcut) : current.mainWindowShortcut;
+  if (hasShortcutPatch && !requestedShortcut) throw new Error("请输入包含Ctrl、Alt或Win键的有效组合；也可以单独使用F1至F24。");
+  const next = normalizeAppSettings({ ...current, ...(patch || {}), mainWindowShortcut: requestedShortcut });
+  if (hasShortcutPatch && next.mainWindowShortcut !== current.mainWindowShortcut && !registerMainWindowShortcut(next.mainWindowShortcut)) {
+    throw new Error("该快捷键可能已被其他程序占用，请录入另一个组合。");
+  }
   appStore.set("settings", next);
   if (patch && Object.prototype.hasOwnProperty.call(patch, "launchAtLogin")) {
     syncLoginItemSettings(next.launchAtLogin);
@@ -697,12 +714,22 @@ function toggleMainWindow() {
 }
 
 function registerMainWindowShortcut(shortcut) {
+  const normalizedShortcut = normalizeMainWindowShortcut(shortcut);
+  if (!normalizedShortcut) return false;
   const previousShortcut = registeredMainWindowShortcut;
-  if (previousShortcut === shortcut && globalShortcut.isRegistered(shortcut)) return true;
+  try {
+    if (previousShortcut === normalizedShortcut && globalShortcut.isRegistered(normalizedShortcut)) return true;
+  } catch {
+    return false;
+  }
   if (previousShortcut) globalShortcut.unregister(previousShortcut);
-  if (globalShortcut.register(shortcut, toggleMainWindow)) {
-    registeredMainWindowShortcut = shortcut;
-    return true;
+  try {
+    if (globalShortcut.register(normalizedShortcut, toggleMainWindow)) {
+      registeredMainWindowShortcut = normalizedShortcut;
+      return true;
+    }
+  } catch {
+    // Electron会拒绝无法解析的accelerator，随后恢复原快捷键。
   }
   if (previousShortcut && globalShortcut.register(previousShortcut, toggleMainWindow)) {
     registeredMainWindowShortcut = previousShortcut;
@@ -1729,10 +1756,6 @@ ipcMain.handle("app:install-update", () => {
   return true;
 });
 ipcMain.handle("app:save-settings", (_, patch) => {
-  const nextShortcut = patch?.mainWindowShortcut;
-  if (nextShortcut && nextShortcut !== getAppSettings().mainWindowShortcut && !registerMainWindowShortcut(nextShortcut)) {
-    throw new Error("该快捷键可能已被其他程序占用，请选择另一个快捷键。");
-  }
   return { ...applyAppSettings(patch), version: app.getVersion() };
 });
 ipcMain.handle("app:open-main", (_, route) => {

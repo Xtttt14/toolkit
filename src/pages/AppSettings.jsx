@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Check, CircleCheck, Download, Info, Keyboard, LayoutPanelTop, LogOut, Power, RefreshCw, Settings, ShieldCheck } from "lucide-react";
+import { shortcutFromKeyboardEvent, shortcutKeys } from "../utils/shortcut.mjs";
 
 const fallbackSettings = {
   showClosePrompt: true,
@@ -10,13 +11,6 @@ const fallbackSettings = {
   showActionConfirmations: true,
   version: ""
 };
-
-const shortcutOptions = [
-  ["Control+Shift+X", "Ctrl + Shift + X"],
-  ["Control+Shift+Z", "Ctrl + Shift + Z"],
-  ["Control+Alt+X", "Ctrl + Alt + X"],
-  ["Control+Alt+Z", "Ctrl + Alt + Z"]
-];
 
 function SettingSwitch({ checked, onChange, label }) {
   return (
@@ -32,6 +26,47 @@ function SettingSwitch({ checked, onChange, label }) {
       <em>{checked ? "开启" : "关闭"}</em>
     </button>
   );
+}
+
+function ShortcutRecorder({ value, onChange, error }) {
+  const [recording, setRecording] = useState(false);
+  const [preview, setPreview] = useState([]);
+  const visibleKeys = recording ? preview : shortcutKeys(value);
+
+  const handleKeyDown = event => {
+    if (!recording) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.key === "Escape" && !event.ctrlKey && !event.altKey && !event.metaKey) {
+      setRecording(false);
+      setPreview([]);
+      return;
+    }
+    const next = shortcutFromKeyboardEvent(event);
+    setPreview(next.preview);
+    if (!next.accelerator) return;
+    setRecording(false);
+    setPreview([]);
+    onChange(next.accelerator);
+  };
+
+  return <div className="shortcut-recorder-wrap">
+    <button
+      type="button"
+      className={`shortcut-recorder ${recording ? "recording" : ""}`}
+      onClick={() => { setRecording(true); setPreview([]); }}
+      onKeyDown={handleKeyDown}
+      aria-label={recording ? "正在录入主窗口快捷键" : `当前快捷键${shortcutKeys(value).join("加")}`}
+    >
+      <span className="shortcut-recorder-state">{recording ? "请按下组合键" : "当前快捷键"}</span>
+      <span className="shortcut-key-row">
+        {visibleKeys.length ? visibleKeys.map((key, index) => <React.Fragment key={`${key}-${index}`}><kbd>{key}</kbd>{index < visibleKeys.length - 1 && <i>+</i>}</React.Fragment>) : <em>等待输入…</em>}
+      </span>
+      <small>{recording ? "按Esc取消；请搭配Ctrl、Alt或Win键" : "点击此处重新录入"}</small>
+    </button>
+    <button type="button" className="shortcut-reset" onClick={() => onChange(fallbackSettings.mainWindowShortcut)} disabled={value === fallbackSettings.mainWindowShortcut}><RefreshCw size={14} />恢复默认</button>
+    {error && <p className="app-setting-error" role="alert">{error}</p>}
+  </div>;
 }
 
 export default function AppSettings() {
@@ -148,16 +183,9 @@ export default function AppSettings() {
           </header>
           <div className="app-setting-row vertical">
             <div><strong>显示或隐藏主窗口</strong><p>即使工具箱在后台，也可以用此快捷键快速恢复或隐藏窗口。</p></div>
-            <div className="app-setting-choice shortcut-choice" role="group" aria-label="主窗口快捷键">
-              {shortcutOptions.map(([value, label]) => (
-                <button key={value} className={settings.mainWindowShortcut === value ? "active" : ""} onClick={() => update({ mainWindowShortcut: value })}>
-                  {label}
-                </button>
-              ))}
-            </div>
-            {saveError && <p className="app-setting-error" role="alert">{saveError}</p>}
+            <ShortcutRecorder value={settings.mainWindowShortcut} onChange={value => update({ mainWindowShortcut: value })} error={saveError} />
           </div>
-          <div className="settings-callout blue"><Keyboard size={17} /><span>快捷键若被其他程序占用，设置不会保存；请改选其他组合。</span></div>
+          <div className="settings-callout blue"><Keyboard size={17} /><span>支持字母、数字、方向键、功能键等组合；若已被其他程序占用，将保留原快捷键。</span></div>
         </article>
 
         <article className="app-settings-card">
