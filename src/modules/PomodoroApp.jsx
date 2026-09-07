@@ -1,3 +1,4 @@
+import { localDateKey } from "../../electron/domain-time.mjs";
 import React, { useEffect, useMemo, useState } from "react";
 import DatePicker from "../components/DatePicker";
 import { useConfirmation } from "../components/Confirmation";
@@ -43,14 +44,6 @@ function DurationValue({ seconds }) {
       {rest > 0 && <><b>{rest}</b><em>分</em></>}
     </span>
   );
-}
-
-function localDateKey(value = new Date()) {
-  const date = value instanceof Date ? value : new Date(value);
-  const y = date.getFullYear();
-  const m = pad(date.getMonth() + 1);
-  const d = pad(date.getDate());
-  return `${y}-${m}-${d}`;
 }
 
 function dateAtStart(key) {

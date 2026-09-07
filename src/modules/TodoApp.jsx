@@ -1,20 +1,58 @@
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, CheckSquare } from "lucide-react";
+import { AlertCircle, ArrowLeft, CheckSquare, LoaderCircle, RotateCcw } from "lucide-react";
 import TodoView from "./todo/TodoView.jsx";
+
+function subscribeTodoData(api, onData, onError) {
+  let active = true;
+  let revision = 0;
+  let unsubscribe;
+  const receive = data => {
+    if (!data || !Array.isArray(data.tasks) || !Array.isArray(data.tags)) {
+      throw new Error("待办数据格式无效");
+    }
+    onData(data);
+  };
+  try {
+    // Subscribe first so a delayed initial read cannot replace a newer pushed snapshot.
+    unsubscribe = api.onChanged(data => {
+      if (!active) return;
+      revision += 1;
+      try { receive(data); }
+      catch (error) { onError(error); }
+    });
+    const readRevision = revision;
+    Promise.resolve(api.getAll()).then(data => {
+      if (active && revision === readRevision) receive(data);
+    }).catch(error => {
+      if (active && revision === readRevision) onError(error);
+    });
+  } catch (error) {
+    if (active) onError(error);
+  }
+  return () => {
+    active = false;
+    if (typeof unsubscribe === "function") unsubscribe();
+  };
+}
 
 export default function TodoApp() {
   const navigate = useNavigate();
   const location = useLocation();
   const [data, setData] = useState(null);
+  const [loadStatus, setLoadStatus] = useState("loading");
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   useEffect(() => {
-    window.todoApi.getAll().then(d => setData(d));
-    const off = window.todoApi.onChanged(d => setData(d));
-    return () => off();
-  }, []);
-
-  if (!data) return null;
+    setLoadStatus("loading");
+    return subscribeTodoData(window.todoApi, next => {
+      setData(next);
+      setLoadStatus("ready");
+    }, error => {
+      console.error("读取待办清单失败", error);
+      setLoadStatus("error");
+    });
+  }, [loadAttempt]);
 
   return (
     <main className="app-shell todo-shell">
@@ -45,7 +83,15 @@ export default function TodoApp() {
             </div>
           </div>
         </header>
-        <TodoView data={data} setData={setData} createRequest={new URLSearchParams(location.search).get("create") || ""} />
+        {loadStatus === "loading" && <div className="todo-empty" role="status"><LoaderCircle size={28} /><span>正在读取待办清单…</span></div>}
+        {loadStatus === "error" && (
+          <div className="todo-empty" role="alert">
+            <AlertCircle size={28} />
+            <span>读取待办清单失败，请重试</span>
+            <button className="todo-btn" onClick={() => setLoadAttempt(attempt => attempt + 1)}><RotateCcw size={15} />重新加载</button>
+          </div>
+        )}
+        {loadStatus === "ready" && <TodoView data={data} setData={setData} createRequest={new URLSearchParams(location.search).get("create") || ""} />}
       </section>
     </main>
   );

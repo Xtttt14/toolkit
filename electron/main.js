@@ -8,6 +8,7 @@ const { getWaterReminderDueAt, safeMinutes } = require("./water-reminder");
 const { parseSchedule, parseExams } = require("./academic-parser");
 const { normalizeMathExpression } = require("./assistant-tools");
 const { startFeishuBridge } = require("./feishu-bridge");
+let domainTime;
 const {
   formatFinanceEntries,
   formatFinanceSummary,
@@ -216,6 +217,8 @@ function initStores() {
   examsStore = new Store({ name: "exams-data", defaults: { exams: [], settings: { enabled: false, reminderMinutes: 30 } } });
 }
 
+const examImportTools = require("./exam-import");
+const pendingExamImports = examImportTools.createPendingExamImports();
 function getScheduleData() { return { courses: scheduleStore.get("courses", []), startDate: scheduleStore.get("startDate", null), settings: { enabled: false, reminderMinutes: 15, ...(scheduleStore.get("settings", {}) || {}) } }; }
 function getExamsData() { return { exams: examsStore.get("exams", []), settings: { enabled: false, reminderMinutes: 30, ...(examsStore.get("settings", {}) || {}) } }; }
 function broadcastAcademic() { sendToAppWindows("academic:schedule-changed", getScheduleData()); sendToAppWindows("academic:exams-changed", getExamsData()); }
@@ -223,7 +226,7 @@ function maybeAcademicNotify() {
   const now = new Date(); const key = todayKey(now); const current = now.getHours() * 60 + now.getMinutes(); const sent = new Set(appStore.get("_academicNotified", []));
   const schedule = getScheduleData();
   if (schedule.settings.enabled && schedule.startDate) {
-    const start = new Date(`${schedule.startDate}T12:00:00`); const week = Math.floor((new Date(`${key}T12:00:00`) - start) / 604800000) + 1; const weekday = now.getDay();
+    const week = domainTime.academicWeek(schedule.startDate, now); const weekday = now.getDay();
     schedule.courses.filter(c => c.weekday === weekday && week >= c.startWeek && week <= c.endWeek && (c.pattern === "每周" || (c.pattern === "单周" ? week % 2 : week % 2 === 0))).forEach(c => { const [h,m] = c.startTime.split(":").map(Number); const due = h * 60 + m - Number(schedule.settings.reminderMinutes || 0); const id = `course-${key}-${c.id}`; if (current >= due && current <= due + 1 && !sent.has(id)) { new Notification({ title: "即将上课", body: `${c.name} · ${c.startTime}${c.location ? ` · ${c.location}` : ""}` }).show(); sent.add(id); } });
   }
   const exams = getExamsData();
@@ -268,23 +271,16 @@ function normalizeTodoTask(task = {}) {
   };
 }
 
-function examDateTime(exam, time) {
-  return new Date(`${exam.date}T${time}:00`);
+function applyTodoCompletion(task, completed) {
+  const nextCompleted = Boolean(completed);
+  task.completed = nextCompleted;
+  task.completedAt = nextCompleted ? new Date().toISOString() : null;
+  task.subtasks = (task.subtasks || []).map(subtask => ({ ...subtask, completed: nextCompleted }));
+  return task;
 }
 
 function getExamTiming(exam) {
-  const times = String(exam.time || "").match(/(?:[01]?\d|2[0-3]):[0-5]\d/g) || [];
-  const startTime = times[0] || "23:59";
-  let endAt = times[1] ? examDateTime(exam, times[1]) : null;
-  if (!endAt && times[0]) {
-    const durationText = String(exam.duration || "");
-    const hourMatch = durationText.match(/(\d+(?:\.\d+)?)\s*(?:小时|h)/i);
-    const minuteMatch = durationText.match(/(\d+)\s*(?:分钟|分|min)/i);
-    const durationMinutes = Math.round((Number(hourMatch?.[1]) || 0) * 60 + (Number(minuteMatch?.[1]) || 0));
-    if (durationMinutes > 0) endAt = new Date(examDateTime(exam, startTime).getTime() + durationMinutes * 60000);
-  }
-  if (!endAt || Number.isNaN(endAt.getTime())) endAt = examDateTime(exam, "23:59");
-  return { startTime, endAt };
+  return domainTime.getExamTiming(exam);
 }
 
 function syncExamTodos(exams, now = new Date()) {
@@ -301,7 +297,7 @@ function syncExamTodos(exams, now = new Date()) {
     const dueDate = `${exam.date}T${startTime}:00`;
     if (!existing) {
       const task = normalizeTodoTask({
-        id: `exam-todo-${exam.id}`,
+        id: data.tasks.some(task => task.id === `exam-todo-${exam.id}`) ? `exam-todo-${exam.id}-${Date.now()}-${Math.random().toString(16).slice(2)}` : `exam-todo-${exam.id}`,
         title,
         description: [exam.time, exam.location].filter(Boolean).join(" · "),
         priority: "P0",
@@ -342,6 +338,38 @@ function syncExamTodos(exams, now = new Date()) {
     saveTodoData(data);
   }
   return { added, updated, completed, changed: Boolean(added || updated || completed) };
+}
+
+function commitExamImport(result) {
+  let historyChanged = false;
+  if (result.rescheduledIds.length) {
+    const data = getTodoData();
+    const tasks = examImportTools.unlinkExamTodos(data.tasks, result.rescheduledIds);
+    historyChanged = tasks.some((task, index) => task !== data.tasks[index]);
+    if (historyChanged) saveTodoData({ ...data, tasks });
+    const notified = appStore.get("_academicNotified", []);
+    appStore.set("_academicNotified", notified.filter(id => !result.rescheduledIds.some(examId => id === `exam-${examId}`)));
+  }
+  examsStore.set("exams", result.exams);
+  const todoSync = syncExamTodos(result.exams);
+  broadcastAcademic();
+  if (todoSync.changed || historyChanged) broadcastState();
+  const imported = result.exams.filter(exam => result.importedIds.includes(exam.id)).sort((a, b) => a.date.localeCompare(b.date) || String(a.time).localeCompare(String(b.time)));
+  return { status: "imported", count: result.count, added: result.added, updated: result.updated, unchanged: result.unchanged, todoAdded: todoSync.added, todoCompleted: todoSync.completed, focusDate: imported[0]?.date || null, data: getExamsData() };
+}
+
+function deleteAcademicExam(id) {
+  const data = getExamsData();
+  const exam = data.exams.find(item => item.id === id);
+  if (!exam) throw new Error("考试不存在或已被删除。");
+  const todos = getTodoData();
+  const tasks = examImportTools.unlinkExamTodos(todos.tasks, [id], true);
+  examsStore.set("exams", data.exams.filter(item => item.id !== id));
+  saveTodoData({ ...todos, tasks });
+  appStore.set("_academicNotified", appStore.get("_academicNotified", []).filter(key => key !== `exam-${id}`));
+  broadcastAcademic();
+  broadcastState();
+  return { data: getExamsData(), removedTodos: todos.tasks.length - tasks.length };
 }
 
 // ─── 应用菜单 ───
@@ -749,6 +777,8 @@ function hideWindowToTray() {
   return true;
 }
 
+const { validateFinanceBackup } = require("./finance-backup");
+
 function normalizeFinanceEntry(entry = {}) {
   const now = new Date().toISOString();
   const amount = Math.round(Math.abs(Number(entry.amount) || 0) * 100) / 100;
@@ -824,14 +854,18 @@ function getFinanceData() {
 }
 
 function saveFinanceData(data) {
+  // Prepare every field first, then let electron-store persist one merged snapshot.
+  // A normalization error cannot leave entries, tags and projects out of sync.
+  const next = {};
   if (data.entries !== undefined) {
-    financeStore.set("entries", data.entries.map(normalizeFinanceEntry).filter(entry => entry.amount > 0));
+    next.entries = data.entries.map(normalizeFinanceEntry).filter(entry => entry.amount > 0);
   }
-  if (data.customTags !== undefined) financeStore.set("customTags", normalizeFinanceTags(data.customTags));
+  if (data.customTags !== undefined) next.customTags = normalizeFinanceTags(data.customTags);
   if (data.tagSettings !== undefined) {
-    financeStore.set("tagSettings", normalizeFinanceTagSettings(data.tagSettings, data.customTags ?? financeStore.get("customTags", {})));
+    next.tagSettings = normalizeFinanceTagSettings(data.tagSettings, next.customTags ?? financeStore.get("customTags", {}));
   }
-  if (data.totalProjects !== undefined) financeStore.set("totalProjects", normalizeTotalProjects(data.totalProjects));
+  if (data.totalProjects !== undefined) next.totalProjects = normalizeTotalProjects(data.totalProjects);
+  if (Object.keys(next).length) financeStore.set(next);
 }
 
 function broadcastFinance() {
@@ -1173,9 +1207,8 @@ function executeAssistantToolCalls(calls) {
     }
     if (call.name === "todo.update" || call.name === "todo.complete") {
       const { data, task, index } = resolveTodo(args.taskId); const id = task.id;
-      const patch = call.name === "todo.complete" ? { completed: args.completed !== false, completedAt: args.completed === false ? null : new Date().toISOString() } : (args.patch || {});
-      if (patch.completed === true) patch.subtasks = task.subtasks.map(subtask => ({ ...subtask, completed: true }));
-      if (patch.completed === false) patch.subtasks = task.subtasks.map(subtask => ({ ...subtask, completed: false }));
+      const patch = call.name === "todo.complete" ? { completed: args.completed !== false } : (args.patch || {});
+      if (patch.completed !== undefined) { patch.subtasks = patch.subtasks ?? task.subtasks; applyTodoCompletion(patch, patch.completed); }
       data.tasks[index] = normalizeTodoTask({ ...data.tasks[index], ...patch, id, createdAt: data.tasks[index].createdAt, updatedAt: new Date().toISOString() }); saveTodoData(data); broadcastState(); results.push("待办已更新\n\n" + formatTodoList([data.tasks[index]])); continue;
     }
     if (call.name === "todo.delete") { const { data, task } = resolveTodo(args.taskId); data.tasks = data.tasks.filter(item => item.id !== task.id); saveTodoData(data); broadcastState(); results.push(`已删除待办「${task.title}」。`); continue; }
@@ -1228,7 +1261,7 @@ function executeAssistantToolCalls(calls) {
     if (call.name === "finance.delete") { const id = resolveRef(args.entryId); const data = getFinanceData(); const entry = data.entries.find(item => item.id === id); if (!entry) throw new Error("账单不存在或尚未被引用"); data.entries = data.entries.filter(item => item.id !== id); data.totalProjects.forEach(project => { project.linkedEntryIds = project.linkedEntryIds.filter(entryId => entryId !== id); }); saveFinanceData(data); broadcastFinance(); results.push(`已删除账单：\n${formatFinanceEntries([entry])}`); continue; }
     if (call.name.startsWith("finance.tag.")) { const type = args.type === "income" ? "income" : "expense"; const data = getFinanceData(); const available = () => [...fixedFinanceTags[type], ...data.customTags[type]].filter(tag => !data.tagSettings[type].hidden.includes(tag)); if (call.name === "finance.tag.list") { results.push(`${type === "income" ? "收入" : "支出"}标签\n${available().map((tag, index) => `${index + 1}. ${tag}`).join("\n")}`); continue; } const name = String(args.name || "").trim().slice(0, 12); if (call.name === "finance.tag.add") { if (name && ![...fixedFinanceTags[type], ...data.customTags[type]].includes(name)) data.customTags[type].push(name); } else if (call.name === "finance.tag.rename") { const oldName = String(args.oldName || "").trim(); const newName = String(args.newName || "").trim().slice(0, 12); const index = data.customTags[type].indexOf(oldName); if (index < 0 || !newName) throw new Error("只能重命名已存在的自定义标签"); data.customTags[type][index] = newName; data.entries = data.entries.map(entry => entry.type === type && entry.tag === oldName ? { ...entry, tag: newName, updatedAt: new Date().toISOString() } : entry); data.tagSettings[type].order = data.tagSettings[type].order.map(tag => tag === oldName ? newName : tag); } else if (call.name === "finance.tag.delete") { if (data.customTags[type].includes(name)) data.customTags[type] = data.customTags[type].filter(tag => tag !== name); else if (fixedFinanceTags[type].includes(name)) data.tagSettings[type].hidden = normalizeStringList([...data.tagSettings[type].hidden, name]); data.tagSettings[type].order = data.tagSettings[type].order.filter(tag => tag !== name); } else if (call.name === "finance.tag.reorder") { const ordered = normalizeStringList(args.orderedTags).filter(tag => available().includes(tag)); data.tagSettings[type].order = [...ordered, ...available().filter(tag => !ordered.includes(tag))]; } saveFinanceData(data); broadcastFinance(); results.push(`已更新${type === "income" ? "收入" : "支出"}标签。`); continue; }
     if (call.name === "finance.backup.export") { const filePath = path.resolve(String(args.filePath || path.join(app.getPath("documents"), `记账备份-${todayKey()}.json`))); if (path.extname(filePath).toLowerCase() !== ".json") throw new Error("备份文件必须使用.json扩展名"); const backup = { app: "个人工具箱-记账助手", version: 1, exportedAt: new Date().toISOString(), ...getFinanceData() }; fs.writeFileSync(filePath, JSON.stringify(backup, null, 2), "utf8"); results.push(`记账备份已导出。\n路径：${filePath}\n账单：${backup.entries.length}笔`); continue; }
-    if (call.name === "finance.backup.import") { if (args.confirmed !== true) throw new Error("恢复备份前必须明确确认"); const filePath = path.resolve(String(args.filePath || "")); if (path.extname(filePath).toLowerCase() !== ".json") throw new Error("备份文件必须使用.json扩展名"); const parsed = JSON.parse(fs.readFileSync(filePath, "utf8")); if (!parsed || !Array.isArray(parsed.entries) || !parsed.customTags || typeof parsed.customTags !== "object") throw new Error("备份文件缺少账目或标签数据"); saveFinanceData({ entries: parsed.entries, customTags: parsed.customTags, tagSettings: parsed.tagSettings || {}, totalProjects: parsed.totalProjects || [] }); broadcastFinance(); results.push(`记账备份已恢复。\n账单：${getFinanceData().entries.length}笔`); continue; }
+    if (call.name === "finance.backup.import") { if (args.confirmed !== true) throw new Error("恢复备份前必须明确确认"); const filePath = path.resolve(String(args.filePath || "")); if (path.extname(filePath).toLowerCase() !== ".json") throw new Error("备份文件必须使用.json扩展名"); const backup = validateFinanceBackup(JSON.parse(fs.readFileSync(filePath, "utf8"))); saveFinanceData(backup); broadcastFinance(); results.push(`记账备份已恢复。\n账单：${getFinanceData().entries.length}笔`); continue; }
     if (call.name === "total.create") { const result = executeFeishuAction({ kind: "add", entity: "total", patch: { name: args.name } }); results.push(result.text); continue; }
     if (call.name === "total.list") { const query = String(args.text || "").toLowerCase(); const data = getFinanceData(); const projects = data.totalProjects.filter(project => !query || project.name.toLowerCase().includes(query)); results.push(["总计项目", `共${projects.length}项`, "", ...(projects.length ? projects.map((project, index) => { const linked = data.entries.filter(entry => project.linkedEntryIds.includes(entry.id)); const amount = project.records.reduce((sum, item) => sum + item.amount, 0) + linked.reduce((sum, item) => sum + item.amount, 0); return `${index + 1}. ${project.name}\n   累计：¥${money(amount)}\n   明细：${project.records.length + linked.length}条`; }) : ["暂无总计项目。"])].join("\n")); continue; }
     if (call.name === "total.update") { const { data, project } = resolveTotal(args.totalName); const name = String(args.patch?.name || "").trim().slice(0, 40); if (!name) throw new Error("项目名称不能为空"); project.name = name; project.updatedAt = new Date().toISOString(); saveFinanceData(data); broadcastFinance(); results.push(`已将总计项目重命名为「${name}」。`); continue; }
@@ -1238,14 +1271,26 @@ function executeAssistantToolCalls(calls) {
     if (call.name === "total.record.update" || call.name === "total.record.delete") { const { data, project } = resolveTotal(args.totalName); const index = project.records.findIndex(item => item.id === String(args.recordId)); if (index < 0) throw new Error("只能按ID修改或删除总计独立记录"); const before = project.records[index]; if (call.name.endsWith("delete")) project.records.splice(index, 1); else { const patch = args.patch || {}; project.records[index] = normalizeTotalProjectRecord({ ...before, ...patch, ...(patch.amount == null ? {} : { amount: resolveAssistantAmount(patch.amount) }), id: before.id, createdAt: before.createdAt, updatedAt: new Date().toISOString() }); } project.updatedAt = new Date().toISOString(); saveFinanceData(data); broadcastFinance(); results.push(`${call.name.endsWith("delete") ? "已删除" : "已更新"}总计项目「${project.name}」的独立记录。`); continue; }
     if (call.name === "total.link_bill") { const entryReference = String(args.entryId ?? "").trim(); const id = resolveRef(!entryReference || /^(?:\$last_finance|本次账单|刚新增的账单|刚刚新增的账单|最近一笔账单|上一笔账单)$/.test(entryReference) ? "$last_finance" : args.entryId); const data = getFinanceData(); const entry = data.entries.find(item => item.id === id); if (!entry) throw new Error("账单不存在或尚未被引用"); const project = findWorkflowTotalProject(data, args.totalName); if (!project.linkedEntryIds.includes(id)) project.linkedEntryIds.push(id); project.updatedAt = new Date().toISOString(); saveFinanceData(data); broadcastFinance(); results.push(`已将${label("finance", entry)}关联到${label("total", project)}。`); continue; }
     if (call.name === "total.unlink_bill") { const id = resolveRef(args.entryId); const { data, project } = resolveTotal(args.totalName); if (!project.linkedEntryIds.includes(id)) throw new Error("该账单未关联到此总计项目"); project.linkedEntryIds = project.linkedEntryIds.filter(entryId => entryId !== id); project.updatedAt = new Date().toISOString(); saveFinanceData(data); broadcastFinance(); results.push(`已取消账单与总计项目「${project.name}」的关联，原账单保留。`); continue; }
-    if (call.name === "academic.schedule.query") { const data = getScheduleData(); const requestedDate = /^\d{4}-\d{2}-\d{2}$/.test(String(args.date || "")) ? String(args.date) : ""; let week = Number(args.week) || null; let weekday = Number.isInteger(Number(args.weekday)) && Number(args.weekday) >= 0 && Number(args.weekday) <= 6 ? Number(args.weekday) : null; if (requestedDate) { const date = new Date(`${requestedDate}T12:00:00`); weekday = date.getDay(); if (!data.startDate) { results.push("课表查询\n无法按具体日期查询：尚未设置开学日期，无法计算该日期对应的教学周。"); continue; } week = Math.floor((date - new Date(`${data.startDate}T12:00:00`)) / 604800000) + 1; } const courses = data.courses.filter(course => (weekday == null || course.weekday === weekday) && (!week || (week >= course.startWeek && week <= course.endWeek && (course.pattern === "每周" || (course.pattern === "单周" ? week % 2 === 1 : week % 2 === 0))))); results.push(formatScheduleCourses(courses, { date: requestedDate, week, weekday })); continue; }
+    if (call.name === "academic.schedule.query") { const data = getScheduleData(); const requestedDate = /^\d{4}-\d{2}-\d{2}$/.test(String(args.date || "")) ? String(args.date) : ""; let week = Number(args.week) || null; let weekday = Number.isInteger(Number(args.weekday)) && Number(args.weekday) >= 0 && Number(args.weekday) <= 6 ? Number(args.weekday) : null; if (requestedDate) { const date = new Date(`${requestedDate}T12:00:00`); weekday = date.getDay(); if (!data.startDate) { results.push("课表查询\n无法按具体日期查询：尚未设置开学日期，无法计算该日期对应的教学周。"); continue; } week = domainTime.academicWeek(data.startDate, date); } const courses = data.courses.filter(course => (weekday == null || course.weekday === weekday) && (week == null || (week >= course.startWeek && week <= course.endWeek && (course.pattern === "每周" || (course.pattern === "单周" ? week % 2 === 1 : week % 2 === 0))))); results.push(formatScheduleCourses(courses, { date: requestedDate, week, weekday })); continue; }
     if (call.name === "academic.schedule.settings.get") { const data = getScheduleData(); results.push(`课表设置\n开学日期：${data.startDate || "未设置"}\n提醒：${data.settings.enabled ? "开启" : "关闭"}\n提前：${data.settings.reminderMinutes}分钟`); continue; }
     if (call.name === "academic.schedule.settings.update") { const patch = args.patch || {}; if (patch.startDate !== undefined) scheduleStore.set("startDate", /^\d{4}-\d{2}-\d{2}$/.test(String(patch.startDate)) ? patch.startDate : null); const current = getScheduleData().settings; scheduleStore.set("settings", { ...current, ...(patch.enabled == null ? {} : { enabled: Boolean(patch.enabled) }), ...(patch.reminderMinutes == null ? {} : { reminderMinutes: Math.max(0, Math.min(1440, Number(patch.reminderMinutes) || 0)) }) }); broadcastAcademic(); results.push("已更新课表设置。"); continue; }
     if (call.name === "academic.schedule.import") { const filePath = path.resolve(String(args.filePath || "")); const startDate = String(args.startDate || ""); if (!fs.existsSync(filePath)) throw new Error("课表文件不存在"); if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) throw new Error("开学日期必须是YYYY-MM-DD"); const courses = parseSchedule(filePath); scheduleStore.set("courses", courses); scheduleStore.set("startDate", startDate); broadcastAcademic(); results.push(`课表已导入。\n课程：${courses.length}门\n开学日期：${startDate}`); continue; }
     if (call.name === "academic.exams.query") { const range = resolveDateRange(args); const exams = getExamsData().exams.filter(exam => (!range.start || exam.date >= range.start) && (!range.end || exam.date <= range.end)); results.push(formatExamList(exams, range)); continue; }
     if (call.name === "academic.exams.settings.get") { const value = getExamsData().settings; results.push(`考试设置\n提醒：${value.enabled ? "开启" : "关闭"}\n提前：${value.reminderMinutes}分钟`); continue; }
     if (call.name === "academic.exams.settings.update") { const patch = args.patch || {}; const current = getExamsData().settings; examsStore.set("settings", { ...current, ...(patch.enabled == null ? {} : { enabled: Boolean(patch.enabled) }), ...(patch.reminderMinutes == null ? {} : { reminderMinutes: Math.max(0, Math.min(10080, Number(patch.reminderMinutes) || 0)) }) }); broadcastAcademic(); results.push("已更新考试设置。"); continue; }
-    if (call.name === "academic.exams.import") { const filePath = path.resolve(String(args.filePath || "")); if (!fs.existsSync(filePath)) throw new Error("考试表文件不存在"); const exams = parseExams(filePath); examsStore.set("exams", [...new Map([...getExamsData().exams, ...exams].map(exam => [exam.id, exam])).values()]); broadcastAcademic(); results.push(`考试信息已导入。\n考试：${exams.length}场`); continue; }
+    if (call.name === "academic.exams.import") {
+      const filePath = path.resolve(String(args.filePath || ""));
+      if (!fs.existsSync(filePath)) throw new Error("考试表文件不存在");
+      const existing = getExamsData().exams;
+      const plan = examImportTools.planExamImport(existing, parseExams(filePath));
+      if (plan.hasConflicts) {
+        results.push("考试表中存在疑似改期或同科多场考试，尚未导入。请在电脑端打开考试信息，重新选择这份考试表并确认保留两场或替换旧场次。");
+        continue;
+      }
+      const result = commitExamImport(examImportTools.applyExamImport(existing, plan));
+      results.push(`考试信息已导入。\n新增：${result.added}场\n更新：${result.updated}场\n未变化：${result.unchanged}场\n新增考试待办：${result.todoAdded}项`);
+      continue;
+    }
     throw new Error(`未实现的助手工具：${call.name}`);
   }
   return { text: results.join("\n"), references: Object.keys(references).length ? references : null, candidates };
@@ -1771,17 +1816,32 @@ ipcMain.handle("academic:schedule-import", async (_, startDate) => {
   if (picked.canceled || !picked.filePaths[0]) return { status: "canceled" };
   const courses = parseSchedule(picked.filePaths[0]); scheduleStore.set("courses", courses); scheduleStore.set("startDate", startDate); broadcastAcademic(); return { status: "imported", count: courses.length };
 });
-ipcMain.handle("academic:exams-import", async () => {
+ipcMain.handle("academic:exams-import", async event => {
   const picked = await dialog.showOpenDialog(mainWindow, { title: "导入考试信息", properties: ["openFile"], filters: [{ name: "学校考试表（DOC）", extensions: ["doc"] }] });
   if (picked.canceled || !picked.filePaths[0]) return { status: "canceled" };
   const exams = parseExams(picked.filePaths[0]);
-  const merged = [...new Map([...getExamsData().exams, ...exams].map(exam => [exam.id, exam])).values()];
-  examsStore.set("exams", merged);
-  const todoSync = syncExamTodos(merged);
-  broadcastAcademic();
-  if (todoSync.changed) broadcastState();
-  return { status: "imported", count: exams.length, todoAdded: todoSync.added, todoCompleted: todoSync.completed };
+  return pendingExamImports.prepare(getExamsData().exams, exams, event.sender.id);
 });
+ipcMain.handle("academic:exams-import-confirm", (event, payload = {}) => {
+  const result = pendingExamImports.resolve(payload.token, getExamsData().exams, payload.decisions || {}, event.sender.id);
+  const imported = commitExamImport(result);
+  pendingExamImports.discard(payload.token, event.sender.id);
+  return imported;
+});
+ipcMain.handle("academic:exams-import-cancel", (event, token) => pendingExamImports.discard(token, event.sender.id));
+ipcMain.handle("academic:exams-update", (_, { id, patch } = {}) => {
+  const exams = getExamsData().exams;
+  const current = exams.find(exam => exam.id === id);
+  if (!current) throw new Error("考试不存在或已被删除。");
+  const next = { ...current };
+  for (const field of ["name", "date", "time", "duration", "location", "stage", "method"]) {
+    if (patch?.[field] !== undefined) next[field] = String(patch[field]).trim();
+  }
+  if (!next.name || !/^\d{4}-\d{2}-\d{2}$/.test(next.date) || !domainTime.localDateKey(next.date)) throw new Error("请填写科目和有效日期。");
+  if (next.time && !/^(?:[01]?\d|2[0-3]):[0-5]\d(?:\s*[-—–~至]\s*(?:[01]?\d|2[0-3]):[0-5]\d)?$/.test(next.time)) throw new Error("考试时间请填写09:00或09:00—11:00。");
+  return commitExamImport({ exams: exams.map(exam => exam.id === id ? next : exam), importedIds: [id], rescheduledIds: next.date !== current.date || next.time !== current.time || next.duration !== current.duration ? [id] : [], count: 1, added: 0, updated: 1, unchanged: 0 });
+});
+ipcMain.handle("academic:exams-delete", (_, id) => deleteAcademicExam(String(id || "")));
 ipcMain.handle("academic:schedule-settings", (_, settings = {}) => { scheduleStore.set("settings", { ...getScheduleData().settings, enabled: Boolean(settings.enabled), reminderMinutes: Math.max(0, Math.min(1440, Number(settings.reminderMinutes) || 0)) }); broadcastAcademic(); return getScheduleData(); });
 ipcMain.handle("academic:exam-settings", (_, settings = {}) => { examsStore.set("settings", { ...getExamsData().settings, enabled: Boolean(settings.enabled), reminderMinutes: Math.max(0, Math.min(10080, Number(settings.reminderMinutes) || 0)) }); broadcastAcademic(); return getExamsData(); });
 
@@ -1824,8 +1884,7 @@ ipcMain.handle("todo:update", (_, { id, patch }) => {
   if (idx === -1) return data;
   if (patch.title !== undefined && !String(patch.title).trim()) throw new Error("任务名称不能为空");
   const updated = { ...data.tasks[idx], ...patch, updatedAt: new Date().toISOString() };
-  if (patch.completed === true) updated.subtasks = updated.subtasks.map(subtask => ({ ...subtask, completed: true }));
-  if (patch.completed === false) updated.subtasks = updated.subtasks.map(subtask => ({ ...subtask, completed: false }));
+  if (patch.completed !== undefined) applyTodoCompletion(updated, patch.completed);
   if (patch.subtasks && patch.completed === undefined) {
     updated.completed = updated.subtasks.length > 0 && updated.subtasks.every(subtask => subtask.completed);
     updated.completedAt = updated.completed ? new Date().toISOString() : null;
@@ -1853,10 +1912,8 @@ ipcMain.handle("todo:toggleComplete", (_, id) => {
   const idx = data.tasks.findIndex(t => t.id === id);
   if (idx === -1) return data;
   const task = data.tasks[idx];
-  task.completed = !task.completed;
-  task.completedAt = task.completed ? new Date().toISOString() : null;
+  applyTodoCompletion(task, !task.completed);
   task.updatedAt = new Date().toISOString();
-  task.subtasks.forEach(subtask => { subtask.completed = task.completed; });
   saveTodoData(data);
   broadcastState();
   return getTodoData();
@@ -2249,28 +2306,25 @@ ipcMain.handle("finance:import", async () => {
   if (picked.canceled || !picked.filePaths[0]) return { status: "canceled" };
   try {
     const raw = await fs.promises.readFile(picked.filePaths[0], "utf8");
-    const parsed = JSON.parse(raw);
-    if (!parsed || !Array.isArray(parsed.entries) || !parsed.customTags || typeof parsed.customTags !== "object") {
-      throw new Error("文件中缺少账目或标签数据");
-    }
+    const backup = validateFinanceBackup(JSON.parse(raw));
     const confirmation = await dialog.showMessageBox(mainWindow, {
       type: "warning",
       title: "恢复记账备份",
       message: "恢复后将覆盖当前全部记账数据",
-      detail: `备份中包含${parsed.entries.length}笔账目。此操作无法撤销，建议先导出当前数据。`,
+      detail: `备份中包含${backup.entries.length}笔账目。此操作无法撤销，建议先导出当前数据。`,
       buttons: ["取消", "确认恢复"],
       defaultId: 0,
       cancelId: 0
     });
     if (confirmation.response !== 1) return { status: "canceled" };
-    saveFinanceData({ entries: parsed.entries, customTags: parsed.customTags, totalProjects: parsed.totalProjects || [] });
+    saveFinanceData(backup);
     broadcastFinance();
     return { status: "imported", count: getFinanceData().entries.length };
   } catch (error) {
     await dialog.showMessageBox(mainWindow, {
       type: "error",
       title: "无法恢复备份",
-      message: "所选文件不是有效的记账备份",
+      message: "请检查备份内容或文件读写权限",
       detail: error.message
     });
     return { status: "error", message: error.message };
@@ -2278,8 +2332,9 @@ ipcMain.handle("finance:import", async () => {
 });
 
 // ═══════ 启动 ═══════
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return;
+  domainTime = await import("./domain-time.mjs");
   initStores();
   syncLoginItemSettings(getAppSettings().launchAtLogin);
   app.setAppUserModelId("local.personal.toolbox");

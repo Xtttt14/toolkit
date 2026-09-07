@@ -2513,3 +2513,30 @@ select option, select option:checked { color:inherit; background:initial; font-w
   .dashboard-course-strip { grid-template-columns:1fr; }
   .water-card-medium { aspect-ratio:auto; min-height:350px; }
 }
+/* Review fixes: compact study overview and explicit data states. */
+.dashboard-load-state { display:flex; flex-direction:column; align-items:flex-start; gap:12px; padding:16px 0; font-size:13px; }
+.dashboard-load-state button,.exam-actions button,.exam-import-review button,.exam-editor button,.academic-error button { padding:8px 14px; border-radius:8px; background:#e9eee9; color:#315b50; }
+.dashboard-finance-hero .dashboard-load-state button { background:#fff; }
+.water-card-medium { aspect-ratio:auto; }
+.schedule-is-empty { min-height:112px; }
+.schedule-is-empty .dashboard-course-strip { min-height:28px; margin-top:6px; }
+.dashboard-small-card { order:-1; min-height:140px; }
+.dashboard-water-ring { margin:12px 0; width:140px; }
+.dashboard-todo-empty { min-height:90px; }
+.exam-import-review,.exam-editor { padding:24px; background:#fffdf8; border:1px solid #dde4db; border-radius:16px; }
+.exam-import-review { margin-bottom:24px; }
+.exam-import-review h2,.exam-editor h2 { margin-top:0; }
+.exam-import-review article { padding:16px 0; border-top:1px solid #e4e8e0; }
+.exam-import-review p { color:#68766e; font-size:13px; }
+.exam-import-review label,.exam-editor label { display:flex; flex-direction:column; gap:7px; font-size:13px; }
+.exam-import-review select,.exam-editor input { width:100%; padding:10px; border:1px solid #cbd6cd; border-radius:8px; background:white; color:#263d38; }
+.exam-import-review footer,.exam-editor footer,.exam-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:14px; }
+.exam-editor { width:min(520px,90vw); max-height:90vh; overflow:auto; display:grid; gap:12px; }
+.exam-editor .primary-button,.exam-import-review .primary-button { color:white; background:#315b50; }
+.academic-error { margin:12px 0; padding:12px; background:#fae9e4; color:#963f30; border-radius:8px; }
+@media (max-width:1050px) {
+  .dashboard-page { padding-top:20px; }
+  .dashboard-header { margin-bottom:16px; }
+  .dashboard-finance-hero { min-height:112px; padding-top:18px; padding-bottom:18px; }
+  .dashboard-small-card { min-height:125px; }
+}

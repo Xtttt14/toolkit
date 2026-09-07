@@ -6,6 +6,8 @@ import {
 import MenuSelect from "../../components/MenuSelect";
 import DatePicker from "../../components/DatePicker";
 import { useConfirmation } from "../../components/Confirmation";
+import useNow from "../../hooks/useNow";
+import { localDateKey, calendarDayDifference, parseLocalDate } from "../../../electron/domain-time.mjs";
 
 const PRIORITIES = ["P0", "P1", "P2", "P3"];
 const PRIORITY_COLORS = { P0: "#e03131", P1: "#f08c00", P2: "#2f9e44", P3: "#868e96" };
@@ -22,26 +24,50 @@ function moveItem(ids, sourceId, targetId, placement = "before") {
 
 function formatDateInput(date) {
   if (!date) return "";
-  return date.substring(0, 10);
+  const parsed = parseLocalDate(date);
+  return Number.isNaN(parsed.getTime()) ? "" : localDateKey(parsed);
 }
 
-function formatDateDisplay(date) {
+function taskDeadline(date) {
+  const parsed = parseLocalDate(date);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(date || ""))) parsed.setHours(23, 59, 59, 999);
+  return parsed;
+}
+
+function formatDateDisplay(date, now = new Date()) {
   if (!date) return "";
-  const d = new Date(date);
-  const now = new Date();
-  const diff = d.getTime() - now.getTime();
-  const days = Math.ceil(diff / 86400000);
-  if (days < -1) return `${Math.abs(days)}天前`;
-  if (days === -1) return "昨天";
-  if (days === 0) return "今天";
-  if (days === 1) return "明天";
-  if (days <= 7) return `${days}天后`;
-  return new Intl.DateTimeFormat("zh-CN", { month: "short", day: "numeric" }).format(d);
+  const d = parseLocalDate(date);
+  if (Number.isNaN(d.getTime())) return "日期无效";
+  const days = calendarDayDifference(d, now);
+  let label;
+  if (days < -1) label = `${Math.abs(days)}天前`;
+  else if (days === -1) label = "昨天";
+  else if (days === 0) label = "今天";
+  else if (days === 1) label = "明天";
+  else if (days <= 7) label = `${days}天后`;
+  else label = new Intl.DateTimeFormat("zh-CN", { month: "short", day: "numeric" }).format(d);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date))) {
+    label += ` ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  }
+  return label;
 }
 
-function isOverdue(date) {
+function isOverdue(date, now = new Date()) {
   if (!date) return false;
-  return new Date(date) < new Date(new Date().toDateString());
+  return taskDeadline(date).getTime() < now.getTime();
+}
+
+function updateDeadlineDate(original, selectedDate) {
+  if (!selectedDate) return null;
+  // A title-only edit must retain the exact instant (and timezone) supplied by imports or the bot.
+  if (formatDateInput(original) === selectedDate) return original;
+  if (!original) return `${selectedDate}T23:59:00`;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(original))) return selectedDate;
+  const previous = parseLocalDate(original);
+  const next = parseLocalDate(selectedDate);
+  if (Number.isNaN(previous.getTime())) return selectedDate;
+  next.setHours(previous.getHours(), previous.getMinutes(), previous.getSeconds(), previous.getMilliseconds());
+  return next.toISOString();
 }
 
 export default function TodoView({ data, setData, createRequest = "" }) {
@@ -66,6 +92,15 @@ export default function TodoView({ data, setData, createRequest = "" }) {
   const [subtaskDrag, setSubtaskDrag] = useState(null);
   const [subtaskEditor, setSubtaskEditor] = useState(null);
   const [newSubtaskTitles, setNewSubtaskTitles] = useState({});
+  const now = useNow();
+  const hasFilters = Boolean(search.trim() || filterTag || filterPriority || !showCompleted);
+
+  function clearFilters() {
+    setSearch("");
+    setFilterTag(null);
+    setFilterPriority(null);
+    setShowCompleted(true);
+  }
 
   function toggleSort(field) {
     if (sortBy === field) {
@@ -81,8 +116,8 @@ export default function TodoView({ data, setData, createRequest = "" }) {
 
   const filtered = useMemo(() => {
     let list = [...tasks];
-    if (search) {
-      const q = search.toLowerCase();
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
       list = list.filter(t => t.title.toLowerCase().includes(q) || t.description.toLowerCase().includes(q));
     }
     if (filterTag) list = list.filter(t => t.tags.includes(filterTag));
@@ -102,7 +137,8 @@ export default function TodoView({ data, setData, createRequest = "" }) {
           va = a.title.toLowerCase(); vb = b.title.toLowerCase();
           return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
         case "dueDate":
-          va = a.dueDate || "9999"; vb = b.dueDate || "9999";
+          va = a.dueDate ? taskDeadline(a.dueDate).getTime() : Infinity;
+          vb = b.dueDate ? taskDeadline(b.dueDate).getTime() : Infinity;
           break;
         default:
           va = 0; vb = 0;
@@ -268,6 +304,7 @@ export default function TodoView({ data, setData, createRequest = "" }) {
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
+          {search && <button className="todo-icon-btn" onClick={() => setSearch("")} aria-label="清除搜索"><X size={14} /></button>}
         </div>
         <div className="todo-filters">
           <MenuSelect className="todo-select" value={filterPriority || ""} ariaLabel="优先级筛选" onChange={value => setFilterPriority(value || null)} options={[{ value:"", label:"全部优先级" }, ...PRIORITIES.map(p => ({ value:p, label:`${p} - ${PRIORITY_LABELS[p]}` }))]} />
@@ -276,6 +313,7 @@ export default function TodoView({ data, setData, createRequest = "" }) {
             <input type="checkbox" checked={showCompleted} onChange={() => setShowCompleted(!showCompleted)} />
             <span>显示已完成</span>
           </label>
+          {hasFilters && <button className="todo-btn small" onClick={clearFilters}>清除筛选</button>}
         </div>
         <div className={`todo-actions ${selectionMode ? "selection-active" : ""}`}>
           {selectionMode ? (
@@ -336,7 +374,8 @@ export default function TodoView({ data, setData, createRequest = "" }) {
         {filtered.length === 0 ? (
           <div className="todo-empty">
             <Check size={36} />
-            <span>暂无任务，点击"新建任务"开始</span>
+            <span>{tasks.length === 0 ? '暂无任务，点击“新建任务”开始' : "没有符合当前搜索或筛选条件的任务"}</span>
+            {tasks.length > 0 && hasFilters && <button className="todo-btn" onClick={clearFilters}>清除搜索与筛选</button>}
           </div>
         ) : (
           filtered.map((task, index) => (
@@ -352,7 +391,7 @@ export default function TodoView({ data, setData, createRequest = "" }) {
               className={`todo-task-block ${taskDrag?.sourceId === task.id ? "dragging" : ""} ${taskDrag?.targetId === task.id ? `drag-over-${taskDrag.placement}` : ""}`}
             >
               <div
-                className={`todo-row ${task.completed ? "completed" : ""} ${isOverdue(task.dueDate) && !task.completed ? "overdue" : ""} ${selectionMode ? "selecting" : ""} ${selectedIds.has(task.id) ? "selected" : ""}`}
+                className={`todo-row ${task.completed ? "completed" : ""} ${isOverdue(task.dueDate, now) && !task.completed ? "overdue" : ""} ${selectionMode ? "selecting" : ""} ${selectedIds.has(task.id) ? "selected" : ""}`}
                 onClick={selectionMode ? () => toggleSelect(task.id) : undefined}
                 role={selectionMode ? "checkbox" : undefined}
                 aria-checked={selectionMode ? selectedIds.has(task.id) : undefined}
@@ -428,9 +467,9 @@ export default function TodoView({ data, setData, createRequest = "" }) {
                 <span className="todo-priority" style={{ color: PRIORITY_COLORS[task.priority] }}>
                   <Flag size={13} /> {task.priority}
                 </span>
-                <span className={`todo-date ${isOverdue(task.dueDate) && !task.completed ? "overdue" : ""}`}>
+                <span className={`todo-date ${isOverdue(task.dueDate, now) && !task.completed ? "overdue" : ""}`}>
                   {task.dueDate ? (
-                    <><Calendar size={13} /> {formatDateDisplay(task.dueDate)}</>
+                    <><Calendar size={13} /> {formatDateDisplay(task.dueDate, now)}</>
                   ) : (
                     <span className="todo-no-date">—</span>
                   )}
@@ -721,7 +760,7 @@ function EditModal({ task, tags, mode = "edit", onClose, onSave, onDelete, onTog
       title: cleanTitle,
       description: description.trim(),
       priority,
-      dueDate: dueDate ? `${dueDate}T23:59:00` : null,
+      dueDate: updateDeadlineDate(task.dueDate, dueDate),
       reminderMinutes: Number(reminderMinutes),
       tags: selectedTags,
       subtasks: subtasks.map(s => ({ id: s.id, title: s.title, completed: s.completed }))
@@ -800,6 +839,7 @@ function EditModal({ task, tags, mode = "edit", onClose, onSave, onDelete, onTog
             <label className="modal-field half">
               <span>截止日期</span>
               <DatePicker value={dueDate} allowEmpty ariaLabel="截止日期" onChange={setDueDate} />
+              {dueDate && <small>{/^\d{4}-\d{2}-\d{2}$/.test(String(updateDeadlineDate(task.dueDate, dueDate))) ? "当日结束时截止" : `截止：${formatDateDisplay(updateDeadlineDate(task.dueDate, dueDate))}`}</small>}
             </label>
           </div>
 

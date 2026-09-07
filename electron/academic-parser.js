@@ -52,7 +52,13 @@ function parseExamText(text) {
 }
 function parseExams(filePath) {
   const exams = documentTables(filePath).flatMap(table => tableRows(table).flatMap(row => row.map(cell => parseExamText(cell.text)).filter(Boolean)));
-  const unique = [...new Map(exams.map(item => [item.id, item])).values()];
+  // A subject may have several exams on one day; retain distinct start times.
+  const unique = [...new Map(exams.map(item => {
+    const start = String(item.time).match(/(\d{1,2}):(\d{2})/);
+    const timeKey = start ? `${start[1].padStart(2, "0")}:${start[2]}` : "unknown";
+    const exam = { ...item, id: `${item.id}-${timeKey}` };
+    return [exam.id, exam];
+  })).values()];
   if (!unique.length) throw new Error("未在考试表中识别到考试，请确认使用的是示例格式的文件");
   return unique;
 }
