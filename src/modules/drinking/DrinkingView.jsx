@@ -144,6 +144,28 @@ export default function DrinkingView({ state, setState, view, setView }) {
   );
 }
 
+function CupNameInput({ value, onCommit }) {
+  const [draft, setDraft] = useState(value);
+  const [editing, setEditing] = useState(false);
+  useEffect(() => { if (!editing) setDraft(value); }, [value, editing]);
+
+  function commit() {
+    const name = draft.trim();
+    setEditing(false);
+    // An empty editing draft is not a new cup name; retain the saved name.
+    if (!name) { setDraft(value); return; }
+    if (name !== value) onCommit(name);
+  }
+
+  return <input value={draft} onFocus={() => setEditing(true)}
+    onChange={event => setDraft(event.target.value)} onBlur={commit}
+    onKeyDown={event => {
+      if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+        event.preventDefault(); event.currentTarget.blur();
+      }
+    }} aria-label="杯子名称" />;
+}
+
 function CupList({ cups, selectedCupId, onChoose, onAdd, onUpdate, onRemove }) {
   return (
     <section className="cup-page">
@@ -160,7 +182,7 @@ function CupList({ cups, selectedCupId, onChoose, onAdd, onUpdate, onRemove }) {
               {selectedCupId === cup.id && <Check size={20} />}
             </button>
             <div className="cup-edit">
-              <input value={cup.name} onChange={e => onUpdate(cup.id, { name: e.target.value })} aria-label="杯子名称" />
+              <CupNameInput value={cup.name} onCommit={name => onUpdate(cup.id, { name })} />
               <div className="compact-number">
                 <input type="number" value={cup.ml} min="50" step="10" onChange={e => onUpdate(cup.id, { ml: e.target.value })} aria-label="杯子容积" />
                 <span>ml</span>
