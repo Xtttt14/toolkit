@@ -637,9 +637,8 @@ function navigateMainWindow(route = "/") {
 }
 
 function syncLoginItemSettings(openAtLogin) {
-  const pathToLaunch = process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
-  const args = isDev ? [app.getAppPath(), "--hidden"] : ["--hidden"];
-  app.setLoginItemSettings({ openAtLogin: Boolean(openAtLogin), path: pathToLaunch, args });
+  require("./login-item").syncLoginItem({ app, isDev, execPath: process.execPath,
+    portablePath: process.env.PORTABLE_EXECUTABLE_FILE, enabled: openAtLogin });
 }
 
 function applyAppSettings(patch = {}) {
@@ -2336,8 +2335,9 @@ app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return;
   domainTime = await import("./domain-time.mjs");
   initStores();
-  syncLoginItemSettings(getAppSettings().launchAtLogin);
   app.setAppUserModelId("local.personal.toolbox");
+  // A development session must not replace the installed app at every launch.
+  if (!isDev) syncLoginItemSettings(getAppSettings().launchAtLogin);
   createAppMenu();
   ensureTray();
   if (!registerMainWindowShortcut(getAppSettings().mainWindowShortcut)) {
