@@ -171,6 +171,31 @@ function CupNameInput({ value, onCommit, autoFocus, onAutoFocused }) {
     }} aria-label="杯子名称" />;
 }
 
+function CapacityInput({ value, onCommit, ariaLabel }) {
+  const [draft, setDraft] = useState(String(value));
+  const [editing, setEditing] = useState(false);
+  useEffect(() => { if (!editing) setDraft(String(value)); }, [value, editing]);
+
+  function commit() {
+    const amount = Number(draft);
+    setEditing(false);
+    if (!/^\d+(?:\.\d+)?$/.test(draft.trim()) || !Number.isFinite(amount) || amount <= 0) {
+      setDraft(String(value));
+      return;
+    }
+    setDraft(String(amount));
+    if (amount !== Number(value)) onCommit(amount);
+  }
+
+  return <input type="text" inputMode="decimal" value={draft} aria-label={ariaLabel}
+    onFocus={() => setEditing(true)} onChange={event => setDraft(event.target.value)}
+    onBlur={commit} onKeyDown={event => {
+      if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+        event.preventDefault(); event.currentTarget.blur();
+      }
+    }} />;
+}
+
 function CupList({ cups, selectedCupId, onChoose, onAdd, onUpdate, onRemove, newCupId, onNameFocused }) {
   return (
     <section className="cup-page">
@@ -189,7 +214,7 @@ function CupList({ cups, selectedCupId, onChoose, onAdd, onUpdate, onRemove, new
             <div className="cup-edit">
               <CupNameInput autoFocus={cup.id === newCupId} onAutoFocused={onNameFocused} value={cup.name} onCommit={name => onUpdate(cup.id, { name })} />
               <div className="compact-number">
-                <input type="number" value={cup.ml} min="50" step="10" onChange={e => onUpdate(cup.id, { ml: e.target.value })} aria-label="杯子容积" />
+                <CapacityInput value={cup.ml} onCommit={ml => onUpdate(cup.id, { ml })} ariaLabel="杯子容积" />
                 <span>ml</span>
               </div>
               <button onClick={() => onRemove(cup.id)} disabled={cups.length <= 1}>删除</button>
@@ -264,7 +289,7 @@ function ProgressView({ state, setState, percent, remainingMl, updateSetting }) 
             <span>时间</span>
             <button className="time-display-button" type="button" onClick={() => setTimePickerOpen(true)}><Clock size={15} />{manualTime}</button>
           </div>
-          <label><span>容量</span><input type="number" min="50" step="10" value={manualMl} onChange={e => setManualMl(e.target.value)} /></label>
+          <label><span>容量</span><CapacityInput value={manualMl} onCommit={setManualMl} ariaLabel="补记容量" /></label>
           <button className="manual-button" type="submit">记入</button>
         </form>
         {timePickerOpen && <TimeWheelPicker value={manualTime} onChange={setManualTime} onClose={() => setTimePickerOpen(false)} />}
