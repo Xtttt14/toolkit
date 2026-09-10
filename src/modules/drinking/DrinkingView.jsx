@@ -81,6 +81,7 @@ function polarPosition(index, total, radius) {
 
 export default function DrinkingView({ state, setState, view, setView }) {
   const [draftSettings, setDraftSettings] = useState(fallbackSettings);
+  const [newCupId, setNewCupId] = useState(null);
 
   useEffect(() => {
     if (state) {
@@ -124,6 +125,7 @@ export default function DrinkingView({ state, setState, view, setView }) {
   }
   function addCupProfile() {
     const id = `cup-${Date.now()}`;
+    setNewCupId(id);
     const next = { ...draftSettings, cupProfiles: [...draftSettings.cupProfiles, { id, name: "新杯子", ml: 200 }] };
     setDraftSettings(next); saveSettings(next);
   }
@@ -136,7 +138,7 @@ export default function DrinkingView({ state, setState, view, setView }) {
 
   return (
     <div className="drinking-inner">
-      {view === "cups" && <CupList cups={draftSettings.cupProfiles} selectedCupId={s.selectedCup?.id} onChoose={chooseCup} onAdd={addCupProfile} onUpdate={updateCup} onRemove={removeCupProfile} />}
+      {view === "cups" && <CupList newCupId={newCupId} onNameFocused={() => setNewCupId(null)} cups={draftSettings.cupProfiles} selectedCupId={s.selectedCup?.id} onChoose={chooseCup} onAdd={addCupProfile} onUpdate={updateCup} onRemove={removeCupProfile} />}
       {view === "progress" && <ProgressView state={s} setState={setState} percent={percent} remainingMl={remainingMl} updateSetting={updateSetting} />}
       {view === "history" && <HistoryView state={s} />}
       {view === "settings" && <SettingsView draftSettings={draftSettings} updateSetting={updateSetting} />}
@@ -144,7 +146,7 @@ export default function DrinkingView({ state, setState, view, setView }) {
   );
 }
 
-function CupNameInput({ value, onCommit }) {
+function CupNameInput({ value, onCommit, autoFocus, onAutoFocused }) {
   const [draft, setDraft] = useState(value);
   const [editing, setEditing] = useState(false);
   useEffect(() => { if (!editing) setDraft(value); }, [value, editing]);
@@ -157,7 +159,10 @@ function CupNameInput({ value, onCommit }) {
     if (name !== value) onCommit(name);
   }
 
-  return <input value={draft} onFocus={() => setEditing(true)}
+  return <input value={draft} autoFocus={autoFocus} onFocus={event => {
+    setEditing(true);
+    if (autoFocus) { event.currentTarget.select(); onAutoFocused(); }
+  }}
     onChange={event => setDraft(event.target.value)} onBlur={commit}
     onKeyDown={event => {
       if (event.key === "Enter" && !event.nativeEvent.isComposing) {
@@ -166,7 +171,7 @@ function CupNameInput({ value, onCommit }) {
     }} aria-label="杯子名称" />;
 }
 
-function CupList({ cups, selectedCupId, onChoose, onAdd, onUpdate, onRemove }) {
+function CupList({ cups, selectedCupId, onChoose, onAdd, onUpdate, onRemove, newCupId, onNameFocused }) {
   return (
     <section className="cup-page">
       <div className="cup-intro">
@@ -182,7 +187,7 @@ function CupList({ cups, selectedCupId, onChoose, onAdd, onUpdate, onRemove }) {
               {selectedCupId === cup.id && <Check size={20} />}
             </button>
             <div className="cup-edit">
-              <CupNameInput value={cup.name} onCommit={name => onUpdate(cup.id, { name })} />
+              <CupNameInput autoFocus={cup.id === newCupId} onAutoFocused={onNameFocused} value={cup.name} onCommit={name => onUpdate(cup.id, { name })} />
               <div className="compact-number">
                 <input type="number" value={cup.ml} min="50" step="10" onChange={e => onUpdate(cup.id, { ml: e.target.value })} aria-label="杯子容积" />
                 <span>ml</span>
