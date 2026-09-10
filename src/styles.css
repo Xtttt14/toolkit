@@ -2447,9 +2447,9 @@ select option, select option:checked { color:inherit; background:initial; font-w
 .finance-hero-heading .dashboard-card-icon { width:44px; height:44px; flex:0 0 auto; color:#ffe0ae; background:rgba(255,255,255,.1); }
 .finance-hero-heading small { display:block; color:rgba(255,255,255,.62); font-size:10px; letter-spacing:.13em; }
 .finance-hero-heading h2 { margin:6px 0 5px; overflow:hidden; color:#fff; font-family:Georgia,"Microsoft YaHei UI",serif; font-size:clamp(22px,2.2vw,31px); font-weight:500; text-overflow:ellipsis; white-space:nowrap; }
-.finance-hero-heading .finance-hero-balance { display:grid; grid-template-columns:max-content 28px; align-items:center; justify-content:start; gap:4px 8px; }
-.finance-hero-balance>span { font-size:clamp(16px,1.4vw,19px); line-height:1.4; letter-spacing:.02em; }
-.finance-hero-balance>strong { grid-column:1/-1; min-width:0; line-height:1.15; overflow:hidden; font-family:"Bahnschrift SemiBold","DIN Alternate","Segoe UI Variable",sans-serif; font-size:clamp(30px,2.8vw,38px); font-weight:600; font-variant-numeric:tabular-nums lining-nums; letter-spacing:.015em; text-overflow:ellipsis; }
+.finance-hero-heading .finance-hero-balance { display:flex; flex-direction:column; align-items:flex-start; gap:4px; }
+.finance-hero-balance>.finance-balance-heading { display:inline-flex; align-items:center; gap:8px; font-size:clamp(16px,1.4vw,19px); line-height:1.4; letter-spacing:.02em; }
+.finance-hero-balance>strong { max-width:100%; min-width:0; line-height:1.15; overflow:hidden; font-family:"Bahnschrift SemiBold","DIN Alternate","Segoe UI Variable",sans-serif; font-size:clamp(30px,2.8vw,38px); font-weight:600; font-variant-numeric:tabular-nums lining-nums; letter-spacing:.015em; text-overflow:ellipsis; }
 .finance-hero-heading p { margin:0; color:rgba(255,255,255,.66); font-size:11px; }
 .finance-hero-metrics { display:flex; gap:10px; position:relative; z-index:1; }
 .finance-hero-metrics>span { min-width:132px; padding:13px 15px; display:grid; grid-template-columns:auto 1fr; align-items:center; gap:3px 7px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.1); border-radius:13px; backdrop-filter:blur(8px); }
