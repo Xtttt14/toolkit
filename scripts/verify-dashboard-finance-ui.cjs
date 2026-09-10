@@ -24,6 +24,10 @@ app.whenReady().then(async () => {
   window.webContents.on("console-message", (_, level, message) => { if (level >= 3) errors.push(message); });
   await window.loadFile(path.join(__dirname, "..", "dist", "index.html"), { hash: "/" });
   await new Promise(resolve => setTimeout(resolve, 180));
+  const hidden = await window.webContents.executeJavaScript("document.querySelector('.finance-hero-balance strong')?.textContent");
+  if (hidden !== "****") throw new Error("首页结余默认未隐藏");
+  await window.webContents.executeJavaScript("document.querySelector('.finance-balance-toggle').click()");
+  await new Promise(resolve => setTimeout(resolve, 50));
   const result = await window.webContents.executeJavaScript(`(() => ({
     balanceLabel:document.querySelector('.finance-hero-balance span')?.textContent,
     balanceValue:document.querySelector('.finance-hero-balance strong')?.textContent,
@@ -44,6 +48,10 @@ app.whenReady().then(async () => {
     [result.detail.includes("本月已记录") && result.detail.includes("今日3笔"), "收支统计说明口径不清晰"],
     [errors.length === 0, `页面控制台出现错误：${errors.join("；")}`]
   ].filter(([passed]) => !passed).map(([, message]) => message);
+  await window.webContents.executeJavaScript("document.querySelector('.finance-balance-toggle').click()");
+  await new Promise(resolve => setTimeout(resolve, 50));
+  const concealed = await window.webContents.executeJavaScript("document.querySelector('.finance-hero-balance strong')?.textContent === '****' && location.hash === '#/'");
+  if (!concealed) failures.push("隐藏结余失败或眼睛按钮触发了页面跳转");
   await window.close();
   if (failures.length) {
     console.error(failures.map(message => `- ${message}`).join("\n"));

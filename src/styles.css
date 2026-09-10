@@ -2540,3 +2540,7 @@ select option, select option:checked { color:inherit; background:initial; font-w
   .dashboard-finance-hero { min-height:112px; padding-top:18px; padding-bottom:18px; }
   .dashboard-small-card { min-height:125px; }
 }
+
+.finance-balance-toggle { flex:0 0 auto; width:30px; height:30px; padding:0; display:inline-grid; place-items:center; align-self:center; margin-left:-10px; color:rgba(255,255,255,.72); background:transparent; border:0; border-radius:7px; cursor:pointer; }
+.finance-balance-toggle:hover { color:#fff; background:rgba(255,255,255,.12); }
+.finance-balance-toggle:focus-visible { outline:2px solid #ffe0ae; outline-offset:2px; }
