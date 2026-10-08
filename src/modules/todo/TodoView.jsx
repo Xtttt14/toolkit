@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Plus, Search, Trash2, ChevronDown, ChevronUp,
   Check, X, Calendar, Flag, AlertCircle, ListChecks, CheckCheck, GripVertical, Pencil
@@ -100,8 +100,33 @@ export default function TodoView({ data, setData, createRequest = "" }) {
   const [subtaskEditor, setSubtaskEditor] = useState(null);
   const [newSubtaskTitles, setNewSubtaskTitles] = useState({});
   const [newSubtaskDeadlines, setNewSubtaskDeadlines] = useState({});
+  const todoListRef = useRef(null);
+  const dragScrollFrame = useRef(null);
   const now = useNow();
   const hasFilters = Boolean(search.trim() || filterTag || filterPriority || !showCompleted);
+
+  useEffect(() => () => {
+    if (dragScrollFrame.current) cancelAnimationFrame(dragScrollFrame.current);
+  }, []);
+
+  function autoScrollTaskList(event) {
+    if (!taskDrag?.sourceId) return;
+    const list = todoListRef.current;
+    if (!list) return;
+    const rect = list.getBoundingClientRect();
+    const edge = 72;
+    const distance = event.clientY < rect.top + edge
+      ? event.clientY - (rect.top + edge)
+      : event.clientY > rect.bottom - edge
+        ? event.clientY - (rect.bottom - edge)
+        : 0;
+    if (!distance) return;
+    if (dragScrollFrame.current) cancelAnimationFrame(dragScrollFrame.current);
+    dragScrollFrame.current = requestAnimationFrame(() => {
+      list.scrollTop += Math.sign(distance) * Math.max(4, Math.min(18, Math.abs(distance) / 3));
+      dragScrollFrame.current = null;
+    });
+  }
 
   function clearFilters() {
     setSearch("");
@@ -381,7 +406,18 @@ export default function TodoView({ data, setData, createRequest = "" }) {
       </div>
 
       {/* Task list */}
-      <div className="todo-list">
+      <div
+        ref={todoListRef}
+        className="todo-list"
+        onDragOver={autoScrollTaskList}
+        onWheel={event => {
+          const list = todoListRef.current;
+          if (!list || list.scrollHeight <= list.clientHeight) return;
+          const atTop = list.scrollTop <= 0 && event.deltaY < 0;
+          const atBottom = list.scrollTop + list.clientHeight >= list.scrollHeight - 1 && event.deltaY > 0;
+          if (!atTop && !atBottom) event.stopPropagation();
+        }}
+      >
         {filtered.length === 0 ? (
           <div className="todo-empty">
             <Check size={36} />

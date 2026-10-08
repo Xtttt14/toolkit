@@ -889,7 +889,7 @@ h1 { margin: 0; color: #0f1720; font-size: clamp(32px, 4vw, 48px); line-height: 
   .todo-actions .todo-btn { flex:1; justify-content:center; }
   .todo-actions.selection-active .todo-selection-summary { flex:1 0 100%; justify-content:center; }
   .todo-header-row { display:none; }
-  .todo-list { overflow:hidden; gap:6px; }
+  .todo-list { overflow:auto; gap:6px; }
   .todo-row {
     grid-template-columns:20px 30px minmax(0,1fr) auto;
     grid-template-rows:auto auto auto auto;
@@ -944,7 +944,7 @@ h1 { margin: 0; color: #0f1720; font-size: clamp(32px, 4vw, 48px); line-height: 
   .day-cell em { min-height:12px; font-size:10px; }
   .stats-panel { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .range-card { padding:10px 12px; gap:6px; }
-  .todo-list { min-height:0; max-height:none; overflow:hidden; }
+  .todo-list { min-height:0; max-height:none; overflow:auto; }
   .home-page { justify-content:center; }
 }
 
