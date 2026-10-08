@@ -756,6 +756,13 @@ h1 { margin: 0; color: #0f1720; font-size: clamp(32px, 4vw, 48px); line-height: 
   padding:8px 12px; border-radius:8px; background:#f5f7f9;
 }
 .subtask-edit-title { font-size:14px; color:#111820; }
+.subtask-edit-title { flex:1; min-width:100px; overflow-wrap:anywhere; }
+.subtask-edit-row,.todo-subtask-add,.subtask-add-row { flex-wrap:wrap; }
+.subtask-deadline { display:flex; flex-wrap:wrap; align-items:center; gap:6px; min-width:0; font-size:11px; color:#78857f; }
+.subtask-deadline input[type="datetime-local"] { width:190px; max-width:100%; min-width:0; flex:0 1 190px; height:32px; padding:0 6px; border:1px solid #dce3e9; border-radius:7px; background:#fff; color:#42544d; font:inherit; }
+.todo-subtask-copy .subtask-deadline { margin-top:8px; }
+.todo-subtask-copy em.subtask-overdue { color:#c54d3e; }
+.subtask-add-row > input { min-width:120px; }
 .subtask-add-row { display:flex; gap:8px; }
 .subtask-add-row input {
   flex:1; height:36px; padding:0 12px; border:1px solid #dce3e9; border-radius:8px;
@@ -2520,7 +2527,7 @@ select option, select option:checked { color:inherit; background:initial; font-w
 .water-card-medium { aspect-ratio:auto; }
 .schedule-is-empty { min-height:112px; }
 .schedule-is-empty .dashboard-course-strip { min-height:28px; margin-top:6px; }
-.dashboard-small-card { order:-1; min-height:140px; }
+.dashboard-small-card { min-height:140px; }
 .dashboard-water-ring { margin:12px 0; width:140px; }
 .dashboard-todo-empty { min-height:90px; }
 .exam-import-review,.exam-editor { padding:24px; background:#fffdf8; border:1px solid #dde4db; border-radius:16px; }

@@ -70,6 +70,13 @@ function updateDeadlineDate(original, selectedDate) {
   return next.toISOString();
 }
 
+function formatDeadlineInput(value) {
+  if (!value) return "";
+  const date = taskDeadline(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${localDateKey(date)}T${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
 export default function TodoView({ data, setData, createRequest = "" }) {
   const confirmAction = useConfirmation();
   const tasks = data?.tasks || [];
@@ -92,6 +99,7 @@ export default function TodoView({ data, setData, createRequest = "" }) {
   const [subtaskDrag, setSubtaskDrag] = useState(null);
   const [subtaskEditor, setSubtaskEditor] = useState(null);
   const [newSubtaskTitles, setNewSubtaskTitles] = useState({});
+  const [newSubtaskDeadlines, setNewSubtaskDeadlines] = useState({});
   const now = useNow();
   const hasFilters = Boolean(search.trim() || filterTag || filterPriority || !showCompleted);
 
@@ -235,16 +243,19 @@ export default function TodoView({ data, setData, createRequest = "" }) {
     const title = (newSubtaskTitles[task.id] || "").trim();
     if (!title || task.subtasks.length >= 8) return;
     const result = await updateTask(task.id, {
-      subtasks: [...task.subtasks, { id: `sub-${Date.now()}-${Math.random().toString(16).slice(2)}`, title, completed: false }]
+      subtasks: [...task.subtasks, { id: `sub-${Date.now()}-${Math.random().toString(16).slice(2)}`, title, completed: false, dueDate: newSubtaskDeadlines[task.id] || null }]
     });
-    if (result) setNewSubtaskTitles(previous => ({ ...previous, [task.id]: "" }));
+    if (result) {
+      setNewSubtaskTitles(previous => ({ ...previous, [task.id]: "" }));
+      setNewSubtaskDeadlines(previous => ({ ...previous, [task.id]: null }));
+    }
   }
 
   async function saveInlineSubtask(task, subtaskId) {
     const title = (subtaskEditor?.title || "").trim();
     if (!title) return;
     const result = await updateTask(task.id, {
-      subtasks: task.subtasks.map(subtask => subtask.id === subtaskId ? { ...subtask, title } : subtask)
+      subtasks: task.subtasks.map(subtask => subtask.id === subtaskId ? { ...subtask, title, dueDate: subtaskEditor.dueDate || null } : subtask)
     });
     if (result) setSubtaskEditor(null);
   }
@@ -614,7 +625,8 @@ export default function TodoView({ data, setData, createRequest = "" }) {
                                   }}
                                 />
                               ) : <strong>{sub.title}</strong>}
-                              <em>{sub.completed ? "已完成" : "待完成"}</em>
+                              <em className={!sub.completed && isOverdue(sub.dueDate, now) ? "subtask-overdue" : ""}>{sub.completed ? "已完成" : isOverdue(sub.dueDate, now) ? "已逾期" : "待完成"}{sub.dueDate ? ` · 截止${formatDateDisplay(sub.dueDate, now)}` : ""}</em>
+                              {subtaskEditor?.taskId === task.id && subtaskEditor?.subtaskId === sub.id && <SubtaskDeadline value={subtaskEditor.dueDate} onChange={dueDate => setSubtaskEditor(previous => ({ ...previous, dueDate }))} />}
                             </span>
                             <div className="todo-subtask-actions">
                               {subtaskEditor?.taskId === task.id && subtaskEditor?.subtaskId === sub.id ? (
@@ -622,7 +634,7 @@ export default function TodoView({ data, setData, createRequest = "" }) {
                                   <button type="button" className="todo-icon-btn" onClick={event => { event.stopPropagation(); saveInlineSubtask(task, sub.id); }} title="保存子任务" aria-label="保存子任务"><Check size={15} /></button>
                                   <button type="button" className="todo-icon-btn" onClick={event => { event.stopPropagation(); setSubtaskEditor(null); }} title="取消修改" aria-label="取消修改"><X size={15} /></button>
                                 </>
-                              ) : <button type="button" className="todo-icon-btn" onClick={event => { event.stopPropagation(); setSubtaskEditor({ taskId: task.id, subtaskId: sub.id, title: sub.title }); }} title="修改子任务" aria-label={`修改${sub.title}`}><Pencil size={14} /></button>}
+                              ) : <button type="button" className="todo-icon-btn" onClick={event => { event.stopPropagation(); setSubtaskEditor({ taskId: task.id, subtaskId: sub.id, title: sub.title, dueDate: sub.dueDate || null }); }} title="修改子任务" aria-label={`修改${sub.title}`}><Pencil size={14} /></button>}
                               <button type="button" className="todo-icon-btn danger" onClick={event => { event.stopPropagation(); deleteInlineSubtask(task, sub); }} title="删除子任务" aria-label={`删除${sub.title}`}><Trash2 size={14} /></button>
                             </div>
                           </div>
@@ -638,6 +650,7 @@ export default function TodoView({ data, setData, createRequest = "" }) {
                           placeholder="添加执行步骤"
                           aria-label="添加子任务"
                         />
+                        <SubtaskDeadline value={newSubtaskDeadlines[task.id]} onChange={dueDate => setNewSubtaskDeadlines(previous => ({ ...previous, [task.id]: dueDate }))} />
                         <button type="button" onClick={() => addInlineSubtask(task)}><Plus size={15} />添加</button>
                       </div>
                     )}
@@ -721,6 +734,14 @@ export default function TodoView({ data, setData, createRequest = "" }) {
   );
 }
 
+function SubtaskDeadline({ value, onChange }) {
+  return <label className="subtask-deadline" onClick={event => event.stopPropagation()}>
+    <span>截止时间</span>
+    <input type="datetime-local" aria-label="子任务截止时间" value={formatDeadlineInput(value)}
+      onChange={event => onChange(event.target.value === formatDeadlineInput(value) ? value : event.target.value || null)} />
+  </label>;
+}
+
 /* ═══════ Edit Modal ═══════ */
 function EditModal({ task, tags, mode = "edit", onClose, onSave, onDelete, onToggle }) {
   const [title, setTitle] = useState(task.title);
@@ -731,6 +752,7 @@ function EditModal({ task, tags, mode = "edit", onClose, onSave, onDelete, onTog
   const [selectedTags, setSelectedTags] = useState([...task.tags]);
   const [subtasks, setSubtasks] = useState(task.subtasks.map(s => ({ ...s })));
   const [newSubtask, setNewSubtask] = useState("");
+  const [newSubtaskDeadline, setNewSubtaskDeadline] = useState(null);
   const [validationError, setValidationError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
@@ -763,7 +785,7 @@ function EditModal({ task, tags, mode = "edit", onClose, onSave, onDelete, onTog
       dueDate: updateDeadlineDate(task.dueDate, dueDate),
       reminderMinutes: Number(reminderMinutes),
       tags: selectedTags,
-      subtasks: subtasks.map(s => ({ id: s.id, title: s.title, completed: s.completed }))
+      subtasks: subtasks.map(s => ({ id: s.id, title: s.title, completed: s.completed, dueDate: s.dueDate || null }))
     };
     setIsSaving(true);
     const result = await onSave(task.id, patch);
@@ -773,8 +795,9 @@ function EditModal({ task, tags, mode = "edit", onClose, onSave, onDelete, onTog
 
   function addSubtask() {
     if (!newSubtask.trim() || subtasks.length >= 8) return;
-    setSubtasks([...subtasks, { id: `sub-${Date.now()}-${Math.random().toString(16).slice(2)}`, title: newSubtask.trim(), completed: false }]);
+    setSubtasks([...subtasks, { id: `sub-${Date.now()}-${Math.random().toString(16).slice(2)}`, title: newSubtask.trim(), completed: false, dueDate: newSubtaskDeadline }]);
     setNewSubtask("");
+    setNewSubtaskDeadline(null);
   }
 
   function removeSubtask(sid) {
@@ -867,6 +890,7 @@ function EditModal({ task, tags, mode = "edit", onClose, onSave, onDelete, onTog
               {subtasks.map(sub => (
                 <div key={sub.id} className="subtask-edit-row">
                   <span className="subtask-edit-title">{sub.title}</span>
+                  <SubtaskDeadline value={sub.dueDate} onChange={dueDate => setSubtasks(previous => previous.map(item => item.id === sub.id ? { ...item, dueDate } : item))} />
                   <button className="todo-icon-btn danger" onClick={() => removeSubtask(sub.id)}><X size={14} /></button>
                 </div>
               ))}
@@ -876,6 +900,7 @@ function EditModal({ task, tags, mode = "edit", onClose, onSave, onDelete, onTog
                 <input value={newSubtask} onChange={e => setNewSubtask(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addSubtask(); } }}
                   placeholder={`添加子任务 (${subtasks.length}/8)`} />
+                <SubtaskDeadline value={newSubtaskDeadline} onChange={setNewSubtaskDeadline} />
                 <button className="todo-btn primary small" onClick={addSubtask}><Plus size={14} /></button>
               </div>
             )}

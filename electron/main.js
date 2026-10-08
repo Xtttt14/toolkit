@@ -247,7 +247,8 @@ function normalizeTodoTask(task = {}) {
     ? task.subtasks.slice(0, 8).map((subtask, index) => ({
         id: String(subtask?.id || `sub-${Date.now()}-${index}`),
         title: String(subtask?.title || "").trim(),
-        completed: Boolean(subtask?.completed)
+        completed: Boolean(subtask?.completed),
+        dueDate: subtask?.dueDate && !Number.isNaN(new Date(subtask.dueDate).getTime()) ? subtask.dueDate : null
       })).filter(subtask => subtask.title)
     : [];
   const completed = Boolean(task.completed) || (subtasks.length > 0 && subtasks.every(subtask => subtask.completed));
@@ -1866,7 +1867,8 @@ ipcMain.handle("todo:add", (_, task) => {
     subtasks: (Array.isArray(task.subtasks) ? task.subtasks : []).slice(0, 8).map((s, index) => ({
       id: String(s.id || `sub-${Date.now()}-${index}-${Math.random().toString(16).slice(2)}`),
       title: String(s.title || "").trim(),
-      completed: Boolean(s.completed)
+      completed: Boolean(s.completed),
+      dueDate: s.dueDate && !Number.isNaN(new Date(s.dueDate).getTime()) ? s.dueDate : null
     })).filter(s => s.title)
   };
   // add new tags
