@@ -771,11 +771,16 @@ export default function TodoView({ data, setData, createRequest = "" }) {
 }
 
 function SubtaskDeadline({ value, onChange }) {
-  return <label className="subtask-deadline" onClick={event => event.stopPropagation()}>
+  return <div className="subtask-deadline" onClick={event => event.stopPropagation()}>
     <span>截止时间</span>
-    <input type="datetime-local" aria-label="子任务截止时间" value={formatDeadlineInput(value)}
-      onChange={event => onChange(event.target.value === formatDeadlineInput(value) ? value : event.target.value || null)} />
-  </label>;
+    <DatePicker value={formatDateInput(value)} allowEmpty ariaLabel="子任务截止日期"
+      onChange={date => onChange(updateDeadlineDate(value, date))} />
+    {value && <input type="time" aria-label="子任务截止时刻" value={formatDeadlineInput(value).slice(11)}
+      onChange={event => {
+        if (!event.target.value || event.target.value === formatDeadlineInput(value).slice(11)) return;
+        onChange(`${formatDateInput(value)}T${event.target.value}:00`);
+      }} />}
+  </div>;
 }
 
 /* ═══════ Edit Modal ═══════ */
@@ -845,7 +850,7 @@ function EditModal({ task, tags, mode = "edit", onClose, onSave, onDelete, onTog
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay">
       <div
         className="modal-card"
         onClick={e => e.stopPropagation()}

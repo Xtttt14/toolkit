@@ -759,7 +759,9 @@ h1 { margin: 0; color: #0f1720; font-size: clamp(32px, 4vw, 48px); line-height: 
 .subtask-edit-title { flex:1; min-width:100px; overflow-wrap:anywhere; }
 .subtask-edit-row,.todo-subtask-add,.subtask-add-row { flex-wrap:wrap; }
 .subtask-deadline { display:flex; flex-wrap:wrap; align-items:center; gap:6px; min-width:0; font-size:11px; color:#78857f; }
-.subtask-deadline input[type="datetime-local"] { width:190px; max-width:100%; min-width:0; flex:0 1 190px; height:32px; padding:0 6px; border:1px solid #dce3e9; border-radius:7px; background:#fff; color:#42544d; font:inherit; }
+.subtask-deadline .date-picker,.modal-field .subtask-deadline .date-picker { width:142px; max-width:100%; }
+.subtask-deadline .date-picker-trigger,.modal-field .subtask-deadline .date-picker-trigger { height:32px; font-size:11px; }
+.subtask-deadline input[type="time"] { width:90px; max-width:100%; min-width:0; flex:0 1 90px; height:32px; padding:0 6px; border:1px solid #dce3e9; border-radius:7px; background:#fff; color:#42544d; font:inherit; }
 .todo-subtask-copy .subtask-deadline { margin-top:8px; }
 .todo-subtask-copy em.subtask-overdue { color:#c54d3e; }
 .subtask-add-row > input { min-width:120px; }

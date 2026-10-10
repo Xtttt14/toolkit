@@ -22,11 +22,18 @@ export default function DatePicker({ value, onChange, min, max, ariaLabel, class
   useEffect(() => { if (!open) setDraft(value || dateKey(new Date())); }, [value, open]);
   useEffect(() => {
     const close = event => { if (!rootRef.current?.contains(event.target) && !panelRef.current?.contains(event.target)) { setOpen(false); setView("date"); } };
-    const keydown = event => { if (event.key === "Escape") { setOpen(false); setView("date"); } };
+    const keydown = event => {
+      if (open && event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        setOpen(false);
+        setView("date");
+      }
+    };
     document.addEventListener("pointerdown", close);
-    document.addEventListener("keydown", keydown);
-    return () => { document.removeEventListener("pointerdown", close); document.removeEventListener("keydown", keydown); };
-  }, []);
+    document.addEventListener("keydown", keydown, true);
+    return () => { document.removeEventListener("pointerdown", close); document.removeEventListener("keydown", keydown, true); };
+  }, [open]);
   useLayoutEffect(() => {
     if (!open) return undefined;
     const updatePosition = () => {
@@ -77,7 +84,7 @@ export default function DatePicker({ value, onChange, min, max, ariaLabel, class
 
   return <div className={`date-picker ${className}`} ref={rootRef}>
     <button type="button" className="date-picker-trigger" aria-label={ariaLabel} aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onClick={() => setOpen(current => !current)}><span>{value ? value.replaceAll("-", ".") : "请选择日期"}</span><CalendarDays size={16} /></button>
-    {open && createPortal(<section ref={panelRef} className="date-picker-panel" role="dialog" aria-label={ariaLabel} style={panelPosition || { visibility:"hidden" }} onPointerDown={event => event.stopPropagation()}>
+    {open && createPortal(<section ref={panelRef} className="date-picker-panel" role="dialog" aria-label={ariaLabel} style={panelPosition || { visibility:"hidden" }} onPointerDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()}>
       <header><button type="button" onClick={() => view === "month" ? setView("date") : (setOpen(false), setView("date"))}>取消</button><strong>{view === "date" ? "选择日期" : "选择年/月"}</strong><button type="button" onClick={confirm}>确定</button></header>
       {view === "date" ? <>
         <div className="date-picker-nav"><button type="button" aria-label="上个月" onClick={() => changeMonth(-1)}><ChevronLeft size={18} /></button><button type="button" className="date-picker-month-button" onClick={() => setView("month")}>{selected.getFullYear()}年{selected.getMonth() + 1}月</button><button type="button" aria-label="下个月" onClick={() => changeMonth(1)}><ChevronRight size={18} /></button></div>
