@@ -14,6 +14,10 @@ assert.equal(extractFeishuMessageText({ message_type: "interactive", content: JS
 assert.equal(extractFeishuMessageText({ message_type: "image", content: JSON.stringify({ image_key: "img_xxx" }) }), "");
 
 (async () => {
+  await assert.rejects(requestDeepSeekCompletion({
+    apiKey: "test", messages: [],
+    fetchImpl: async () => { throw new TypeError("fetch failed", { cause: Object.assign(new Error("certificate"), { code: "SELF_SIGNED_CERT_IN_CHAIN" }) }); }
+  }), /DEEPSEEK_CA_CERT/);
   let responseIndex = 0;
   let executedCalls = [];
   const responses = [

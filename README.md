@@ -133,6 +133,8 @@ DEEPSEEK_API_KEY=你的DeepSeek_API_Key
 
 重新打开已安装的工具箱后，只要应用仍在运行或隐藏在托盘中，手机私聊机器人即可正常工作。首次启动且尚未配置时，应用会在同一目录生成 `feishu-bridge.env.example` 作为模板；请复制为 `.env` 后填写。
 
+如果DeepSeek请求报`SELF_SIGNED_CERT_IN_CHAIN`，通常是企业代理或安全软件使用的根证书未被Node信任。向管理员获取可信的PEM根证书，在同一`.env`中添加`DEEPSEEK_CA_CERT=C:/certs/company-root.pem`并重启应用。该配置仅为DeepSeek请求追加可信CA，保留标准根证书和证书校验。
+
 机器人会将最近80条收发消息及尚未过期的结构化候选列表保存到本机；重启工具箱后会恢复其中最近48条作为DeepSeek的对话上下文。候选列表有效期为10分钟，过期后需要重新查询。
 
 交付约定：每次完成并验证改动后，自动提交并推送至GitHub仓库；提交说明必须概括本次改动项。每次创建安装包时，默认更新现有的`E:\toolkit\personal-toolbox`安装目录（安装向导仍允许改选其他目录）。仅在明确要求发布，或功能达到一个完整版本时，才更新`package.json`版本号、推送标签并发布Release。GitHub Actions会自动构建安装包、生成更新元数据并创建GitHub Release：
